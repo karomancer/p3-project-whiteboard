@@ -2,11 +2,20 @@ package storageproto
 
 const (
 	DEFAULT = itoa //Only syncs for that user to server (not to anyone else)
+	CLASS
 	LECTURES
 	ASSIGNMENTS
 	SUBMISSION
 	OFFICEHOURS
-	OTHER
+	OTHER //for other class files or folders from the prof, or if students have a collaborative hw etc.
+)
+
+
+//constants for permissions
+const (
+	READ = itoa //can read only
+	WRITE //can read and write
+	COPY //r/w a copy of the file: when students can write to their own copy of the file which then syncs to the teacher but does not overwrite the teacher's original file
 )
 
 type Node struct {
@@ -20,7 +29,7 @@ type SyncFile struct {
 	Owner       *userproto.User
 	File        *os.File
 	FileInfo    *os.FileInfo
-	Permissions map[string]*os.FileMode //Default permissions if in a preset folder, else can be set for custom folder types
+	Permissions map[string]int //Default permissions if in a preset folder, else can be set for custom folder types
 	Synced      bool
 }
 
@@ -30,7 +39,7 @@ type Directory struct {
 	Dir         *os.File
 	DirInfo     *os.FileInfo
 	Files       []*SyncFile //consider (*File) Readdirnames that reads names from within directory
-	Permissions map[string]*os.FileMode
+	Permissions map[string]int //map of users w/ access to directory 
 	Synced      bool
 }
 
