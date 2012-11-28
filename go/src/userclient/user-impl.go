@@ -22,6 +22,11 @@ func NewUserclient(myhostport string) *Userclient {
 }
 
 func (uc *Userclient) CreateUser(args *userproto.CreateUserArgs, reply *userproto.CreateUserReply) error {
+	if uc.User != nil {
+		//User must log out first before creating another user
+		reply.Status = EEXISTS
+		return nil
+	}
 	_, exists := uc.Midclient.Get(args.Username)
 	user := &User{Username: args.Username, Password: args.Password, Email: args.Email, Classes: make(map[string]string)}
 	if exists != nil {
@@ -62,32 +67,25 @@ func (uc *Userclient) AuthenticateUser(args *userproto.AuthenticateUserArgs, rep
 	return nil
 }
 
+func (uc *Userclient) Timer() {
+
+}
+
 //Things get pushed to the user automatically, but in case it's acting funny the user can also 
 //manually ask for a sync
 func (uc *Userclient) Sync() error {
 
 }
 
-func (uc *Userclient) MakeDirectory() error {
+//Can toggle sync (don't sync this file anymore) or sync it again!
+func (uc *Userclient) ToggleSync(args *userproto.ToggleSyncArgs, reply *userproto.ToggleSyncReply) error {
 
 }
 
-func (uc *Userclient) RemoveDirectory() error {
+func (uc *Userclient) AddPermissions(args *userproto.AddPermissionsArgs, reply *userproto.AddPermissionsReply) error {
 
 }
 
-func (uc *Userclient) MakeFile() error {
-
-}
-
-func (uc *Userclient) RemoveFile() error {
-
-}
-
-func (uc *Userclient) AddPermissions() error {
-
-}
-
-func (uc *Userclient) RemovePermissions() error {
+func (uc *Userclient) RemovePermissions(args *userproto.RemovePermissionsArgs, reply *userproto.RemovePermissionsReply) error {
 
 }

@@ -5,8 +5,8 @@ import {
 }
 //**USER TYPES
 const (
-	STUDENT    = 0 //Only syncs for that user to server (not to anyone else)
-	INSTRUCTOR = 1
+	STUDENT     //Only syncs for that user to server (not to anyone else)
+	INSTRUCTOR 
 )
 
 // Status codes
@@ -49,52 +49,18 @@ type AuthenticateUserReply struct {
 	Status int
 }
 
-type PutFileArgs struct {
-	Username  string
-	Directoryname string
-	File  *os.File //? or File descriptor?
+type ToggleSyncArgs struct {
+	Filename string 
 }
 
-type PutFileReply struct {
-	Status string
-}
-
-type GetFileArgs struct {
-	Username string
-	Filename string
-}
-
-type GetFileReply struct {
-	Status  int
-	File *os.File
-}
-
-type GetDirectoryArgs struct { // Used for both GetTribbles and GetTribblesBySubscription
-	Username string
-	Directoryname string
-}
-
-type GetDirectoryReply struct {
-	Status   int
-	Files []*os.File
-}
-
-type AddPermissionsArgs struct {
-	Username string
-	Permissions *os.FileMode 
-	Filename *os.File
-}
-
-type AddPermissionsReply struct {
+type ToggleSyncReply struct {
 	Status int
 }
 
-type RemovePermissionsArgs struct {
-	Username string
-	Permissions *os.FileMode
-	Filename *os.File
+type EditPermissionsArgs struct {
+	File *os.File
 }
 
-type RemovePermissionsReply struct {
+type EditPermissionsReply struct {
 	Status int
 }

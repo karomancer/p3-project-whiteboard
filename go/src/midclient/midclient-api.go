@@ -3,8 +3,8 @@
 package midclient
 
 import (
-	"storage"
 	"os"
+	"storage"
 )
 
 //Needs to find buddy node
@@ -32,7 +32,6 @@ func (mc *Midclient) Put(key, data string) error {
 	return mc.iPut(key, filetype, file)
 }
 
-
 //*** Initially, don't implement this shit ***/
 //User deleted locally; remove from repository
 //Should we make another one if the user deletes from the repository?
@@ -49,20 +48,9 @@ func (mc *Midclient) ToggleSync(key string) error {
 
 }
 
-//Maybe a string instead of a filemode...
-func (mc *Midclient) AddPermissions(filekey string, mode *os.FileMode, users string[]) error {
-	return mc.iAddPersmissions(filekey, mode, users)
-}
-
-func (mc *Midclient) RemovePermissions(filekey string, mode *os.FileMode, users string[]) error {
-	return mc.iRemovePersmissions(filekey, mode, users)
-}
-
-
 //For Tier 3:
 //AddtoQueue
 //RemoveFromQueue
-
 
 // Partitioning:  Defined here so that all implementations
 // use the same mechanism.
@@ -72,6 +60,3 @@ func Storehash(key string) uint32 {
 	hasher.Write([]byte(key))
 	return hasher.Sum32()
 }
-
-
-
