@@ -71,7 +71,6 @@ func (uc *Userclient) iCreateUser(args *userproto.CreateUserArgs, reply *userpro
 func (uc *Userclient) iWalkDirectoryStructure(keypath string, dir *storageproto.SyncFile) {
 	keyend := strings.Split(keypath, ":")[1]
 	filepath := uc.Homedir + strings.Join(keyend.Split(keyend, "?"), "/")
-
 	<- uc.fileKeyMutex 
 	uc.fileKeyMap[filepath] = dir.Owner + "?" + keypath 
 	uc.fileKeyMutex <- 1
