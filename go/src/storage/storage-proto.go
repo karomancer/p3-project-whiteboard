@@ -10,12 +10,11 @@ const (
 	OTHER //for other class files or folders from the prof, or if students have a collaborative hw etc.
 )
 
-
 //constants for permissions
 const (
-	READ = itoa //can read only
-	WRITE //can read and write
-	COPY //r/w a copy of the file: when students can write to their own copy of the file which then syncs to the teacher but does not overwrite the teacher's original file
+	READ  = itoa //can read only
+	WRITE        //can read and write
+	COPY         //r/w a copy of the file: when students can write to their own copy of the file which then syncs to the teacher but does not overwrite the teacher's original file
 )
 
 type Node struct {
@@ -27,21 +26,23 @@ type Node struct {
 //synced and which are not
 type SyncFile struct {
 	Owner       *userproto.User
-	File        *os.File
+	File        *os.File    // if dir, can use "Readdir(0) will return all FileInfos associated with this dir"
+	Files       []*SyncFile //is null if not a dir
 	FileInfo    *os.FileInfo
 	Permissions map[string]int //Default permissions if in a preset folder, else can be set for custom folder types
 	Synced      bool
 }
 
-//Are both Directory and SyncFile structs needed?
-type Directory struct {
-	Owner       *userproto.User
-	Dir         *os.File
-	DirInfo     *os.FileInfo
-	Files       []*SyncFile //consider (*File) Readdirnames that reads names from within directory
-	Permissions map[string]int //map of users w/ access to directory 
-	Synced      bool
-}
+// //Are both Directory and SyncFile structs needed?
+// //Also the Class directory struct
+// type Directory struct {
+// 	Owner       *userproto.User
+// 	Dir         *os.File
+// 	DirInfo     *os.FileInfo
+// 	Files       []*SyncFile    //consider (*File) Readdirnames that reads names from within directory
+// 	Permissions map[string]int //map of users w/ access to directory 
+// 	Synced      bool
+// }
 
 type GetArgs struct {
 	Key    string
