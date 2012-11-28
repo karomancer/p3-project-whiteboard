@@ -59,6 +59,8 @@ type ToggleSyncReply struct {
 
 type EditPermissionsArgs struct {
 	File *os.File
+	Users []User
+	Permission int
 }
 
 type EditPermissionsReply struct {
