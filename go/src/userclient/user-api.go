@@ -27,8 +27,8 @@ func (uc *Userclient) AuthenticateUser(args *userproto.AuthenticateUserArgs, rep
 
 //Things get pushed to the user automatically, but in case it's acting funny the user can also 
 //manually ask for a sync
-func (uc *Userclient) Sync() error {
-
+func (uc *Userclient) Sync(args *userproto.ToggleSyncArgs, reply *userproto.ToggleSyncReply) error {
+	return uc.iSync(args, reply)
 }
 
 //Can toggle sync (don't sync this file anymore) or sync it again!
