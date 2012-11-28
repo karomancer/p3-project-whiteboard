@@ -5,20 +5,20 @@ package midclient
 import (
 	"net/rpc"
 	"os"
-	"storage"
+	// "storage"
 )
 
 type Midclient struct {
-	Hostport        string
-	Buddy           *rpc.Client //this is the "buddy" server in the server ring
-	ConnectionCache map[string]*rpc.Client
-	ConnCacheMutex  chan int
+	hostport        string
+	buddy           *rpc.Client
+	connectionCache map[string]*rpc.Client
+	connCacheMutex  chan int
 }
 
 //Needs to find buddy node, but for simplicity start 
 //by providing buddy node
 func iNewMidClient(server string, myhostport string) (*Midclient, error) {
-	mc := &Midclient{Hostport: myhostport}
+	mc := &Midclient{hostport: myhostport}
 
 	// Create RPC connection to storage server
 	buddy, dialErr := rpc.DialHTTP("tcp", server)
@@ -26,16 +26,15 @@ func iNewMidClient(server string, myhostport string) (*Midclient, error) {
 		fmt.Printf("Could not connect to server %s, returning nil\n", server)
 		return nil, dialErr
 	}
-	mc.Buddy = buddy
+	mc.buddy = buddy
 
-	mc.ConnectionCache = make(map[string]*rpc.Client)
-	mc.ConnCacheMutex = make(chan int, 1)
-	mc.ConnCacheMutex <- 1
+	mc.connectionCache = make(map[string]*rpc.Client)
+	mc.connCacheMutex = make(chan int, 1)
+	mc.connCacheMutex <- 1
 
 	//Cache RPC?
 	return mc, nil
 }
-
 
 //figures out which server the key hashes to by jumping aroudn the server ring
 func (mc *Midclient) getNode(key string) (*rpc.Client, error) {
@@ -43,9 +42,9 @@ func (mc *Midclient) getNode(key string) (*rpc.Client, error) {
 	class := strings.Split(key, "?")[0]
 	keyid := Storehash(class)
 
-	<-mc.ConnCacheMutex
-	node, ok := mc.ConnectionCache[class]
-	mc.ConnCacheMutex <- 1
+	<-mc.connCacheMutex
+	node, ok := mc.connectionCache[class]
+	mc.connCacheMutex <- 1
 
 	if ok == true {
 		return node, nil
@@ -72,7 +71,7 @@ func (mc *Midclient) iGet(key string) (string, error) {
 	}
 
 	//set up the args with the key
-	args := &storageproto.GetArgs{key, mc.Hostport}
+	args := &storageproto.GetArgs{key, mc.hostport}
 	//set up the reply.....
 	var reply storageproto.GetReply
 	//Get that stuff

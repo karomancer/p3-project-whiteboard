@@ -1,12 +1,9 @@
 package userproto
 
-import (
-	"os"
-)
 //**USER TYPES
 const (
-	STUDENT     //Only syncs for that user to server (not to anyone else)
-	INSTRUCTOR 
+	STUDENT = iota //Only syncs for that user to server (not to anyone else)
+	INSTRUCTOR
 )
 
 // Status codes
@@ -50,7 +47,7 @@ type AuthenticateUserReply struct {
 }
 
 type ToggleSyncArgs struct {
-	Filename string 
+	Filename string
 }
 
 type ToggleSyncReply struct {
@@ -58,8 +55,8 @@ type ToggleSyncReply struct {
 }
 
 type EditPermissionsArgs struct {
-	Filename string
-	Users []User
+	Filename   string
+	Users      []User
 	Permission int
 }
 
