@@ -7,21 +7,14 @@ import (
 	"os"
 )
 
-
+//Needs to find buddy node
 func NewMidClient(myhostport string) (*Midclient, error) {
-	return iNewMidClient(server, myhostport)
-}
-
-func (mc *Midclient) CreateUser(name string, password string, email string, usertype string) error {
-	return mc.iCreateUser(name, password, email, usertype)
-}
-
-func (mc *Midclient) AddClass(name string, class string) error {
-	return mc.iAddClass(name, class)
+	return iNewMidClient(myhostport)
 }
 
 //Returns marshalled:
 // * users
+// * Classes
 // * File descriptors (files)
 // * File descriptors (directories)
 func (mc *Midclient) Get(key string) (string, error) {
@@ -33,32 +26,27 @@ func (mc *Midclient) Get(key string) (string, error) {
 //Automatically adds to the directory list it belongs in
 
 //Can also be used to make directories
+//and users
 //(FileMode) IsDir can tell if its a directory...in FileInfo
-func (mc *Midclient) Put(key, filetype int, data string) error {
+func (mc *Midclient) Put(key, data string) error {
 	return mc.iPut(key, filetype, file)
 }
 
-//User deleted file locally; remove from repository
+
+//*** Initially, don't implement this shit ***/
+//User deleted locally; remove from repository
 //Should we make another one if the user deletes from the repository?
 //(e.g. professor removes a file, should that sync with user?)
-func (mc *Midclient) DeleteFile(file *storage.SyncFile) error {
+func (mc *Midclient) Delete(key string) error {
 	return mc.iDeleteFile(file)
 }
 
 //Add/Remove sync   
 //(any future changes of this particular file will not be synced to the server)
 //may be used if the user is running out of space
-func (mc *Midclient) ToggleSync(file string) error {
+func (mc *Midclient) ToggleSync(key string) error {
 	return mc.iToggleSync(file)
-}
 
-//Get list of files in the current directory (only keys are needed)
-//Separate Directory struct may be needed for meta data about directory
-
-//consider (*File) Readdirnames that reads names from within directory
-//Necessary considering how a dir is just a file?
-func (mc *Midclient) GetDir(key string) ([]string, error) {
-	return mc.iGetDir(key)
 }
 
 //Maybe a string instead of a filemode...
@@ -87,4 +75,3 @@ func Storehash(key string) uint32 {
 
 
 
-\
