@@ -6,13 +6,6 @@ import (
 	"os"
 )
 
-type Userclient struct {
-	User      userproto.User
-	BuddyNode string
-	hostport  string
-	Midclient *midclient.Midclient
-}
-
 func NewUserclient(myhostport string) *Userclient {
 	return iNewUserClient(myhostport)
 }
