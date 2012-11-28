@@ -26,6 +26,7 @@ type Node struct {
 //synced and which are not
 type SyncFile struct {
 	Owner       *userproto.User
+	Class       string      //classkey owner:class
 	File        *os.File    // if dir, can use "Readdir(0) will return all FileInfos associated with this dir"
 	Files       []*SyncFile //is null if not a dir
 	FileInfo    *os.FileInfo

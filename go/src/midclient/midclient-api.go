@@ -2,14 +2,9 @@
 
 package midclient
 
-import (
-	"os"
-	"storage"
-)
-
 //Needs to find buddy node
-func NewMidClient(myhostport string) (*Midclient, error) {
-	return iNewMidClient(myhostport)
+func NewMidClient(server string, myhostport string) (*Midclient, error) {
+	return iNewMidClient(server, myhostport)
 }
 
 //Returns marshalled:
@@ -29,7 +24,7 @@ func (mc *Midclient) Get(key string) (string, error) {
 //and users
 //(FileMode) IsDir can tell if its a directory...in FileInfo
 func (mc *Midclient) Put(key, data string) error {
-	return mc.iPut(key, filetype, file)
+	return mc.iPut(key, file)
 }
 
 //*** Initially, don't implement this shit ***/
@@ -39,7 +34,6 @@ func (mc *Midclient) Put(key, data string) error {
 func (mc *Midclient) Delete(key string) error {
 	return mc.iDeleteFile(file)
 }
-
 
 //This is probably just actually a call to Get/Put from the user client so should be removed
 //Add/Remove sync   

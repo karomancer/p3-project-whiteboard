@@ -16,7 +16,7 @@ type userclient struct {
 	Hostport  string
 	Midclient *midclient.Midclient
 	FileKeyMutex chan int
-	FileKeyMap 	map[string]string //From local file path to its owner for quick searching
+	FileKeyMap 	map[string]string //From local file path to its full storage key for quick searching
 }
 
 func iNewuserclient(myhostport string, homedir string) *userclient {
@@ -35,7 +35,7 @@ func (uc *userclient) iCreateUser(args *userproto.CreateUserArgs, reply *userpro
 		reply.Status = EEXISTS
 		return nil
 	}
-	//check to see if username already exists
+	//check to see if Username already exists
 	_, exists := uc.Midclient.Get(args.Username)
 	//if it doesn't we are good to go
 	if exists == nil {
@@ -78,7 +78,7 @@ func (uc *userclient) iWalkDirectoryStructure(keypath string, dir *storageproto.
 }
 
 func (uc *userclient) iAuthenticateUser(args *userproto.AuthenticateUserArgs, reply *userproto.AuthenticateUserReply) error {
-	userJSON, exists := uc.midclient.Get(args.username)
+	userJSON, exists := uc.midclient.Get(args.Username)
 	if exists != nil {
 		var user userproto.user
 		jsonBytes := []byte(userJSON)
@@ -142,43 +142,65 @@ func (uc *userclient) iMonitorServer() {
 						//If no errors, get file off of server to compare
 						var syncFile storageproto.SyncFile
 						syncBytes := []byte(syncfileJSON)
-						unmarshalErr = json.Unmarshal(syncBytes, &syncFile)
-						if unmarshalErr == nil { fmt.Println("Unmarshal error.\n") }
+						_ = json.Unmarshal(syncBytes, &syncFile)
+						// if unmarshalErr == nil { fmt.Println("Unmarshal error.\n") }
 							
 							//If local was updated more recently, put local to server
 							if fileinfo.ModTime().After(syncFile.FileInfo.ModTime()) {
-								syncFile.File = file
-								syncFile.FileInfo = fileinfo
-
-								fileJSON, marshalErr := json.Marshal(syncFile)
 								if marshalErr == nil {
 									//If has permissions, overwrite.
 									//Additionally, if student in class, take old sync file as original
-									if syncFile.Permissions[uc.user.username] == storageproto.WRITE {
+									if syncFile.Permissions[uc.user.Username] == storageproto.WRITE {
+										if uc.user.Classes[syncFile.Class] == STUDENT {
+
+										}
+
+										syncFile.File = file
+										syncFile.FileInfo = fileinfo
+
+										fileJSON, marshalErr := json.Marshal(syncFile)
+
 										createErr := uc.midclient.Put(filekey, fileJSON)
 										if createErr != nil {
 											fmt.Println("Creation error!\n")
 										}	 
 										
-									} else { //If not, make new file in storage with owner as this student
-										newkey := uc.user.username + ":" + strings.Split(filekey, ":")[1]
+									} 
+									else { //If not, make new file in storage with owner as this student
+										syncFile.File = file
+										syncFile.FileInfo = fileinfo
+										syncFile.Owner = uc.user.Username
+										
+										fileJSON, _ := json.Marshal(syncFile)
+										//Put new file in storage server
+										newkey := uc.user.Username + ":" + strings.Split(filekey, ":")[1]
 										createErr := uc.midclient.Put(newkey, fileJSON) 
 										if createErr != nil {
 											fmt.Println("Creation error!\n")
 										}
+										//Associate with class
+										classkey := syncFile.Class
+										classJSON, _ := uc.midclient.Get(classkey)
+
+										var classFile storageproto.SyncFile
+										classBytes := []byte(classJSON)
+										json.Unmarshal(classBytes, &classFile)
+
+										append(classFile.Files, syncFile)
+										classJSONEdit, _ := json.Marshal(classFile)
+										uc.midclient.Put(classkey)
 									}
 								}
-
-
 									 	
-							}	 else {		//else, copy server to local
+							}	
+							else {		//else, copy server to local
 								file.Truncate(fileinfo.Size())
 								var content [syncFile.FileInfo.Size()]byte
 								_, readErr := syncFile.Read(content)
 								if readErr == nil {
 									file.Write(content)
 								}
-						}
+							}
 
 						//TODO: If changed but didn't have permission to: 
 						//make new file for original

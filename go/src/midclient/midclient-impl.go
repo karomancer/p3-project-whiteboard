@@ -5,7 +5,7 @@ package midclient
 import (
 	"net/rpc"
 	"os"
-	"storage"
+	// "storage"
 )
 
 type Midclient struct {
