@@ -40,6 +40,8 @@ func (mc *Midclient) Delete(key string) error {
 	return mc.iDeleteFile(file)
 }
 
+
+//This is probably just actually a call to Get/Put from the user client so should be removed
 //Add/Remove sync   
 //(any future changes of this particular file will not be synced to the server)
 //may be used if the user is running out of space

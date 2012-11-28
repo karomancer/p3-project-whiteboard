@@ -10,54 +10,62 @@ import (
 	"time"
 )
 
-type Userclient struct {
-	user      userproto.user
-	homedir	string //path to home directory for Project Whiteboard files
-	hostport  string
-	midclient *midclient.midclient
-	fileKeyMutex chan int
-	fileKeyMap 	map[string]string //From local file path to its owner for quick searching
+type userclient struct {
+	User userproto.User
+	Homedir	string //path to home directory for Project Whiteboard files
+	Hostport  string
+	Midclient *midclient.Midclient
+	FileKeyMutex chan int
+	FileKeyMap 	map[string]string //From local file path to its owner for quick searching
 }
 
-func iNewUserclient(myhostport string, homedir string) *Userclient {
+func iNewuserclient(myhostport string, homedir string) *userclient {
 	mclient, err := midclient.NewMidclient(myhostport)
 	if err != nil {
 		return nil
 	}
 	mutex := make(chan int, 1)
 	mutex <- 1
-	return &Userclient{Homedir: homedir, BuddyNode: mclient.Buddy, Hostport: myhostport, Midclient: mclient, FileKeyMutex: mutex, FileKeyMap: make(map[string]string)}
+	return &userclient{Homedir: homedir, Hostport: myhostport, Midclient: mclient, FileKeyMutex: mutex, FileKeyMap: make(map[string]string)}
 }
 
-func (uc *Userclient) iCreateUser(args *userproto.CreateUserArgs, reply *userproto.CreateUserReply) error {
+func (uc *userclient) iCreateUser(args *userproto.CreateUserArgs, reply *userproto.CreateUserReply) error {
 	if uc.user == nil {
 		//User must log out first before creating another user
 		reply.Status = EEXISTS
 		return nil
 	}
-	_, exists := uc.midclient.Get(args.username)
-	user := &User{Username: args.username, Password: args.Password, Email: args.Email, Classes: make(map[string]string)}
-	if exists != nil {
+	//check to see if username already exists
+	_, exists := uc.Midclient.Get(args.Username)
+	//if it doesn't we are good to go
+	if exists == nil {
+		//make new user
+		//LATER: should actually hash the password before we store it.....
+		user := &User{Username: args.Username, Password: args.Password, Email: args.Email, Classes: make(map[string]string)}
+		//marshal it
 		userjson, marshalErr := json.Marshal(user)
 		if marshalErr != nil {
 			return marshalErr
 		}
-		createErr := uc.midclient.Put(args.username, userjson)
+		//send it to the server
+		createErr := uc.Midclient.Put(args.Username, userjson)
 		if createErr != nil {
 			return createEr
 		}
-		uc.user = user
+		//set the current user of the session to the one we just created
+		uc.User = user
 		reply.Status = userproto.OK
 		return nil
 	}
+	//otherwise the name already exists and we must chose another name
 	reply.Status = userproto.EEXISTS
 	return nil
 }
 
 //Walks directory structure to find all files and directories in each class
 //and populates cache with their filepaths for easy storage access later
-func (uc *Userclient) iWalkDirectoryStructure(keypath string, dir *storageproto.SyncFile) {
-	keyend := strings.Split(classkey, ":")[1]
+func (uc *userclient) iWalkDirectoryStructure(keypath string, dir *storageproto.SyncFile) {
+	keyend := strings.Split(keypath, ":")[1]
 	filepath := uc.homedir + strings.Join(keyend.Split(keyend, "?"), "/")
 
 	<- uc.fileKeyMutex 
@@ -69,14 +77,20 @@ func (uc *Userclient) iWalkDirectoryStructure(keypath string, dir *storageproto.
 	}
 }
 
-func (uc *Userclient) iAuthenticateUser(args *userproto.AuthenticateUserArgs, reply *userproto.AuthenticateUserReply) error {
+func (uc *userclient) iAuthenticateUser(args *userproto.AuthenticateUserArgs, reply *userproto.AuthenticateUserReply) error {
 	userJSON, exists := uc.midclient.Get(args.username)
 	if exists != nil {
 		var user userproto.user
 		jsonBytes := []byte(userJSON)
+		//unmarshall the data
 		unmarshalErr := json.Unmarshal(jsonBytes, &user)
-		if unmarshalErr != nil { return unmarshalErr }
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		//check if the passwords match
+		//LATER: should actually just hash the password and then check the hashes
 		if args.Password == user.Password {
+			//if they do it's all good and we are logged in
 			reply.Status = userproto.OK
 			//Get user data for temporary session
 			uc.user = user
@@ -97,18 +111,19 @@ func (uc *Userclient) iAuthenticateUser(args *userproto.AuthenticateUserArgs, re
 		}
 		return nil
 	}
+	//if there isn't a user by that name just return error
 	reply.Status = userproto.ENOSUCHUSER
 	return nil
 }
 
 //To reflect added files in local
-func (uc *Userclient) MonitorLocal() {
+func (uc *userclient) MonitorLocal() {
 
 }
 
 
 //To reflect changes in the server
-func (uc *Userclient) MonitorServer() {
+func (uc *userclient) iMonitorServer() {
 	for {
 		time.Sleep(10 * time.Second)
 		<- uc.fileKeyMutex
@@ -177,15 +192,19 @@ func (uc *Userclient) MonitorServer() {
 
 //Things get pushed to the user automatically, but in case it's acting funny the user can also 
 //manually ask for a sync
-func (uc *Userclient) iSync() error {
+func (uc *userclient) iSync() error {
 
 }
 
 //Can toggle sync (don't sync this file anymore) or sync it again!
-func (uc *Userclient) iToggleSync(args *userproto.ToggleSyncArgs, reply *userproto.ToggleSyncReply) error {
+func (uc *userclient) iToggleSync(args *userproto.ToggleSyncArgs, reply *userproto.ToggleSyncReply) error {
 	
 }
 
-func (uc *Userclient) iEditPermissions(args *userproto.EditPermissionsArgs, reply *userproto.EditPermissionsReply) error {
-	
+//can change permissions on a file, but only if you are the owner of a file. On front end will be triggered by "share this file" and can choose whether they can read or write to it.
+func (uc *userclient) iEditPermissions(args *userproto.AddPermissionsArgs, reply *userproto.AddPermissionsReply) error {
+	//if args.permission = nil then we are removing people from the permission list
+	//also gotta check if we are adding a user to the permission list if the user actually exists
+	//otherwise if the user already exists on the list we just change the permission to the new value
+	//may want to change permissions to better reflect the scaling of them or something gah
 }

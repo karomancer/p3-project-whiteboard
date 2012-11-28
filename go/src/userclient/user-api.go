@@ -29,6 +29,8 @@ func (uc *Userclient) ToggleSync(args *userproto.ToggleSyncArgs, reply *userprot
 	return uc.iToggleSync(args, reply)
 }
 
+//Set the permissions of a file/directory for certain users to a particular setting
+//Can change/add/remove permissions
 func (uc *Userclient) EditPermissions(args *userproto.EditPermissionsArgs, reply *userproto.EditPermissionsReply) error {
 	return uc.iEditPermissions(args, reply)
 }
