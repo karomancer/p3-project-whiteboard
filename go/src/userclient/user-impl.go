@@ -63,7 +63,7 @@ func (uc *Userclient) CreateUser(args *userproto.CreateUserArgs, reply *userprot
 //Walks directory structure to find all files and directories in each class
 //and populates cache with their filepaths for easy storage access later
 func (uc *Userclient) iWalkDirectoryStructure(keypath string, dir *storageproto.SyncFile) {
-	keyend := strings.Split(classkey, ":")[1]
+	keyend := strings.Split(keypath, ":")[1]
 	filepath := uc.Homedir + strings.Join(keyend.Split(keyend, "?"), "/")
 
 	<- uc.FileKeyMutex 
@@ -100,7 +100,7 @@ func (uc *Userclient) iAuthenticateUser(args *userproto.AuthenticateUserArgs, re
 				
 				var class storageproto.SyncFile
 				classBytes := []byte(classJSON)
-				unmarshalErr = json.Unmarshal(jsonBytes, &class)
+				unmarshalErr = json.Unmarshal(classBytes, &class)
 				if unmarshalErr != nil { return unmarshalErr }
 
 				uc.iWalkDirectoryStructure(classkey, class)
@@ -145,4 +145,71 @@ func (uc *Userclient) iEditPermissions(args *userproto.AddPermissionsArgs, reply
 	//also gotta check if we are adding a user to the permission list if the user actually exists
 	//otherwise if the user already exists on the list we just change the permission to the new value
 	//may want to change permissions to better reflect the scaling of them or something gah
+
+	//get the current directory because we can only edit permissions of a file when we are in it's directory
+	currDir, wdErr := os.Getwd()
+	if wdErr != nil { return wdErr }
+	//strip the path down to only the path after the WhiteBoard file, since the rest is not consistant computer to computer
+	paths := strings.SplitAfterN(currDir, "WhiteBoard", -1)
+	//create the filepath to the actula file 
+	filepath := paths[1] + "/" + args.Filename
+	//find out the key from the FileKeyMap
+	key, exists := uc.FileKeyMap[filepath]
+	if exists != true {
+		reply.Status = userproto.ENOSUCHFILE
+		return nil
+	}
+	//actually get the current permissions info from the server
+	//LATER: can also cache this info if we are acessing it frequently to reduce RPC calls
+	//chances are in real life however that this won't be acessed very frequently from any particular user
+	//so may be safe to ignore that case
+	jfile, getErr := us.Midclient.Get(key)
+	if getErr != nil { return getErr }
+	//unmarshal that shit
+	var file storageproto.SyncFile
+	fileBytes := []byte(jfile)
+	unmarshalErr = json.Unmarshal(fileBytes, &file)
+	if unmarshalErr != nil { return unmarshalErr }
+
+	//get the current permissions
+	//we don't need to lock anything while changing the permissions because only the owner of a particular file can change the permissions, 
+	//which means that there won't be any instance where two people are changing the same permissions at once
+	permissions := file.permissions
+
+	//go through all the users
+	for i := 0; i < args.Users; i++ {
+		_, exists := permissions[args.Users[i]]
+		//if the dude already exists then just change the permissions
+		if exists == true {
+			//if the permissions is NONE then we just remove the dude from the list
+			if args.Permission == storageproto.NONE {
+				delete(permissions, args.Users[i])
+			} else {
+				permissions[args.Users[i]] = args.Permission
+			}
+		} else {
+			//otherwise we have to check if the dude is a valid dude
+			_, exists := uc.Midclient.Get(args.Users[i])
+			//if he is then we can add him to the list
+			if exists != nil {
+				//if the permission is NONE then just don't add him
+				if args.Permission != storageproto.NONE {
+					permissions[args.Users[i]] = args.Permission
+				}
+			}
+		}
+	}
+	//we are done so the permissions are changed and we need to update the server
+	file.permissions = permissions
+	filejson, marshalErr := json.Marshal(file)
+	if marshalErr != nil { return marshalErr }
+
+	err := uc.Midclient.Put(key, filejson)
+	if err != nil { return err }
+
+	reply.Status = userproto.OK
+
+	return nil
 }
+
+

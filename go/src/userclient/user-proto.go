@@ -1,8 +1,8 @@
 package userproto
 
-import {
+import (
 	"os"
-}
+)
 //**USER TYPES
 const (
 	STUDENT     //Only syncs for that user to server (not to anyone else)
