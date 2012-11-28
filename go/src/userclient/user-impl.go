@@ -159,7 +159,6 @@ func (uc *Userclient) iMonitoryLocal() {
 
 						//If local was updated more recently, put local to server
 						syncFileInfo, _ := syncFile.File.Stat()
-						syncFileInfoSize := syncFileInfo.Size()
 						if fileinfo.ModTime().After(syncFileInfo.ModTime()) {
 							//If has permissions, overwrite.
 							//Additionally, if student in class, take old sync file as original
@@ -169,7 +168,7 @@ func (uc *Userclient) iMonitoryLocal() {
 								}
 								syncFile.File = file
 								syncFile.FileInfo = &fileinfo
-								fileJSON, marshalErr := json.Marshal(syncFile)
+								fileJSON, _ := json.Marshal(syncFile)
 
 								createErr := uc.midclient.Put(filekey, string(fileJSON))
 								if createErr != nil {
@@ -203,7 +202,7 @@ func (uc *Userclient) iMonitoryLocal() {
 
 						} else { //else, copy server to local...that is if server is newer
 							file.Truncate(fileinfo.Size())
-							var content [syncFileInfoSize]byte
+							var content []byte
 							_, readErr := syncFile.File.Read(content)
 							if readErr == nil {
 								file.Write(content)
@@ -223,12 +222,12 @@ func (uc *Userclient) iMonitoryLocal() {
 //Things get pushed to the user automatically, but in case it's acting funny the user can also 
 //manually ask for a sync
 func (uc *Userclient) iSync() error {
-
+	return nil
 }
 
 //Can toggle sync (don't sync this file anymore) or sync it again!
 func (uc *Userclient) iToggleSync(args *userproto.ToggleSyncArgs, reply *userproto.ToggleSyncReply) error {
-
+	return nil
 }
 
 //can change permissions on a file, but only if you are the owner of a file. On front end will be triggered by "share this file" and can choose whether they can read or write to it.
