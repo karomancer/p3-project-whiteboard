@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-type userclient struct {
+type Userclient struct {
 	User userproto.User
 	Homedir	string //path to home directory for Project Whiteboard files
 	Hostport  string
@@ -64,16 +64,10 @@ func (uc *userclient) iCreateUser(args *userproto.CreateUserArgs, reply *userpro
 
 //Walks directory structure to find all files and directories in each class
 //and populates cache with their filepaths for easy storage access later
-<<<<<<< HEAD
-func (uc *Userclient) iWalkDirectoryStructure(keypath string, dir *storageproto.SyncFile) {
-	keyend := strings.Split(keypath, ":")[1]
-	filepath := uc.Homedir + strings.Join(keyend.Split(keyend, "?"), "/")
-=======
+
 func (uc *userclient) iWalkDirectoryStructure(keypath string, dir *storageproto.SyncFile) {
 	keyend := strings.Split(keypath, ":")[1]
 	filepath := uc.homedir + strings.Join(keyend.Split(keyend, "?"), "/")
->>>>>>> 0759574d1c586f292b9e8a3a01428c3d88a28784
-
 	<- uc.fileKeyMutex 
 	uc.fileKeyMap[filepath] = dir.Owner + "?" + keypath 
 	uc.fileKeyMutex <- 1
