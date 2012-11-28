@@ -1,8 +1,8 @@
 package storageproto
 
 import (
-	"userproto"
 	"os"
+	"userproto"
 )
 
 //reply constants
@@ -25,7 +25,7 @@ const (
 	READ  = iota //can read only
 	WRITE        //can read and write
 	COPY         //r/w a copy of the file: when students can write to their own copy of the file which then syncs to the teacher but does not overwrite the teacher's original file
-	NONE //signals that we should remove user from permission list
+	NONE         //signals that we should remove user from permission list
 )
 
 type Node struct {
@@ -37,9 +37,9 @@ type Node struct {
 //synced and which are not
 type SyncFile struct {
 	Owner       *userproto.User
-	Class       string      //classkey owner:class
-	File        *os.File    // if dir, can use "Readdir(0) will return all FileInfos associated with this dir"
-	Files       []*SyncFile //is null if not a dir
+	Class       string   //classkey owner:class
+	File        *os.File // if dir, can use "Readdir(0) will return all FileInfos associated with this dir"
+	Files       []string // nil if not dir, else keys of files
 	FileInfo    *os.FileInfo
 	Permissions map[string]int //Default permissions if in a preset folder, else can be set for custom folder types
 	Synced      bool

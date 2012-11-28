@@ -24,7 +24,7 @@ type User struct {
 	Password string
 	Email    string
 	UserType int
-	Classes  map[string]string //Class to role in class (instructor or student?)
+	Classes  map[string]int //Class to role in class (instructor or student?)
 }
 
 type CreateUserArgs struct {
