@@ -1,13 +1,14 @@
 package userclient
 
 import (
-	"encoding/json"
-	"midclient"
-	"os"
+	//"encoding/json"
+	//"midclient"
+	//"os"
+	"userproto"
 )
 
-func NewUserclient(myhostport string) *Userclient {
-	return iNewUserClient(myhostport)
+func NewUserclient(myhostport string, homedir string) *Userclient {
+	return iNewUserClient(myhostport, homedir)
 }
 
 func (uc *Userclient) CreateUser(args *userproto.CreateUserArgs, reply *userproto.CreateUserReply) error {
@@ -20,8 +21,8 @@ func (uc *Userclient) AuthenticateUser(args *userproto.AuthenticateUserArgs, rep
 
 //Things get pushed to the user automatically, but in case it's acting funny the user can also 
 //manually ask for a sync
-func (uc *Userclient) Sync(args *userproto.ToggleSyncArgs, reply *userproto.ToggleSyncReply) error {
-	return uc.iSync(args, reply)
+func (uc *Userclient) Sync() error {
+	return uc.iSync()
 }
 
 //Can toggle sync (don't sync this file anymore) or sync it again!

@@ -1,7 +1,17 @@
 package storageproto
 
+import (
+	"userproto"
+	"os"
+)
+
+//reply constants
 const (
-	DEFAULT = itoa //Only syncs for that user to server (not to anyone else)
+	OK = iota
+)
+
+const (
+	DEFAULT = iota //Only syncs for that user to server (not to anyone else)
 	CLASS
 	LECTURES
 	ASSIGNMENTS
@@ -12,7 +22,7 @@ const (
 
 //constants for permissions
 const (
-	READ  = itoa //can read only
+	READ  = iota //can read only
 	WRITE        //can read and write
 	COPY         //r/w a copy of the file: when students can write to their own copy of the file which then syncs to the teacher but does not overwrite the teacher's original file
 	NONE //signals that we should remove user from permission list

@@ -5,6 +5,10 @@ package midclient
 import (
 	"net/rpc"
 	"os"
+	"fmt"
+	"strings"
+	"storageproto"
+	"lsplog"
 	// "storage"
 )
 
@@ -42,6 +46,9 @@ func (mc *Midclient) getNode(key string) (*rpc.Client, error) {
 	class := strings.Split(key, "?")[0]
 	keyid := Storehash(class)
 
+	//because as of yet unused....
+	keyid = keyid
+
 	<-mc.connCacheMutex
 	node, ok := mc.connectionCache[class]
 	mc.connCacheMutex <- 1
@@ -54,6 +61,9 @@ func (mc *Midclient) getNode(key string) (*rpc.Client, error) {
 	//****** IMPLEMENT HERE! ********
 
 	//rpc call to buddy node which then asks around for the right server and then returns that guy
+
+	return nil, nil
+
 }
 
 //Returns marshalled:
@@ -67,7 +77,7 @@ func (mc *Midclient) iGet(key string) (string, error) {
 	node, getServerErr := mc.getNode(key)
 	if getServerErr != nil {
 		fmt.Fprintf(os.Stderr, " error in get node\n")
-		return "", err
+		return "", getServerErr
 	}
 
 	//set up the args with the key
@@ -75,7 +85,7 @@ func (mc *Midclient) iGet(key string) (string, error) {
 	//set up the reply.....
 	var reply storageproto.GetReply
 	//Get that stuff
-	err = node.Call("StorageRPC.Get", args, &reply)
+	err := node.Call("StorageRPC.Get", args, &reply)
 	if err != nil {
 		return "", err
 	}
@@ -96,7 +106,7 @@ func (mc *Midclient) iPut(key string, data string) error {
 	node, getServerErr := mc.getNode(key)
 	if getServerErr != nil {
 		fmt.Fprintf(os.Stderr, " error in get node\n")
-		return "", getServerErr
+		return getServerErr
 	}
 
 	//set up args and reply
@@ -109,8 +119,25 @@ func (mc *Midclient) iPut(key string, data string) error {
 		return putErr
 	}
 	if reply.Status != storageproto.OK {
-		return log.MakeErr("Put failed: Storage error")
+		return lsplog.MakeErr("Put failed: Storage error")
 	}
 	//Sucess!
 	return nil
+}
+
+//*** Initially, don't implement this shit ***/
+//User deleted locally; remove from repository
+//Should we make another one if the user deletes from the repository?
+//(e.g. professor removes a file, should that sync with user?)
+func (mc *Midclient) iDeleteFile(key string) error {
+	return nil
+}
+
+//This is probably just actually a call to Get/Put from the user client so should be removed
+//Add/Remove sync   
+//(any future changes of this particular file will not be synced to the server)
+//may be used if the user is running out of space
+func (mc *Midclient) iToggleSync(key string) error {
+	return nil
+
 }
