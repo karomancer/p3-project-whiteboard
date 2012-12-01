@@ -80,6 +80,5 @@ type RegisterArgs struct {
 
 // RegisterReply is sent in response to both Register and GetServers
 type RegisterReply struct {
-	Ready   bool
 	Servers []Node
 }
