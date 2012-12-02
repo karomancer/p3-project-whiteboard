@@ -16,7 +16,8 @@ package storage
 
 import (
 	crand "crypto/rand"
-	"fmt"
+	//"fmt"
+	"application/storagerpc"
 	"hash/fnv"
 	"log"
 	"math"
@@ -24,28 +25,26 @@ import (
 	"math/rand"
 	"net/rpc"
 	"protos/storageproto"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
 
 type Storageserver struct {
-	nodeid    uint32
-	portnum   int
-	isMaster  bool
-	numNodes  int
-	nodeList  []storageproto.Node
-	nodeListM chan int
-	nodeMap   map[storageproto.Node]uint32 //
-	nodeMapM  chan int
+	nodeid  uint32
+	portnum int
 
-	connMap  map[string]*rpc.Client //
+	nodeList  []storageproto.Node //list of all other nodes and portnumbers, SORTED
+	nodeListM chan int
+
+	connMap  map[uint32]*rpc.Client //map from nodeID to connection for your skiplist
 	connMapM chan int
 
-	valMap  map[string]string
+	valMap  map[string]string //map of actual stuff we are storing... I think
 	valMapM chan int
 
-	srpc *Storageserver
+	srpc *storagerpc.StorageRPC
 }
 
 func reallySeedTheDamnRNG() {
@@ -54,12 +53,22 @@ func reallySeedTheDamnRNG() {
 }
 
 func (ss *Storageserver) GarbageCollector() {
-
+	//do we need this since we don't have leases?
 }
+
+//set up sorting for the storage server list
+type nodeL []storageproto.Node
+
+func (nl nodeL) Len() int      { return len(nl) }
+func (nl nodeL) Swap(i, j int) { nl[i], nl[j] = nl[j], nl[i] }
+
+type byID struct{ nodeL }
+
+func (c byID) Less(i, j int) bool { return c.nodeL[i].NodeID < c.nodeL[j].NodeID }
 
 func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver {
 
-	//fmt.Println("called new storage server")
+	// //fmt.Println("called new storage server")
 
 	ss := &Storageserver{}
 
@@ -78,11 +87,7 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 	ss.nodeListM = make(chan int, 1)
 	ss.nodeListM <- 1
 
-	ss.nodeMap = make(map[storageproto.Node]int)
-	ss.nodeMapM = make(chan int, 1)
-	ss.nodeMapM <- 1
-
-	ss.connMap = make(map[string]*rpc.Client)
+	ss.connMap = make(map[uint32]*rpc.Client)
 	ss.connMapM = make(chan int, 1)
 	ss.connMapM <- 1
 
@@ -90,72 +95,152 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 	ss.valMapM = make(chan int, 1)
 	ss.valMapM <- 1
 
-	ss.numNodes = 0
-
+	/*right now we are assuming that the buddy node won't fail. need to change for later*/
+	buddyNode, err := rpc.DialHTTP("tcp", buddy)
 	for err != nil {
 		//keep retrying until we can actually conenct
-		//(Master may not have started yet)
-		masterClient, err = rpc.DialHTTP("tcp", master)
-		//fmt.Println("Trying to connect to master...")
+		//(buddy may not have started yet)
+		buddyNode, err = rpc.DialHTTP("tcp", buddy)
+		// 	//fmt.Println("Trying to connect to buddy...")
 		time.Sleep(time.Duration(3) * time.Second)
 	}
+
+	/*gotta send rpc call to buddy to get ourselves on everyone's list of nodes 
+	and also get the list of nodes for ourselves. */
 
 	//set up args for registering ourselves
 	info := storageproto.Node{HostPort: "localhost:" + strconv.Itoa(portnum), NodeID: ss.nodeid}
 	args := storageproto.RegisterArgs{ServerInfo: info}
 	reply := storageproto.RegisterReply{}
 
-	for err != nil || reply.Ready != true {
+	err = buddyNode.Call("StorageRPC.Register", &args, &reply)
+	for err != nil {
 		//call register on the master node with our info as the args. Kinda weird
-		err = masterClient.Call("StorageRPC.Register", &args, &reply)
+		err = buddyNode.Call("StorageRPC.Register", &args, &reply)
 		//keep retrying until all things are registered
 		//fmt.Println("Trying to register with master...")
 		time.Sleep(time.Duration(3) * time.Second)
 	}
 
-	//gotta still set up some other shits
-	//like get list of servers from reply maybe?
-	//spec is pretty vague...
+	//now gotta get the reply and do stuff with it
 	<-ss.nodeListM
-	//fmt.Println("Aquired nodeList lock NewStorageserver")
 	ss.nodeList = reply.Servers
+	ss.nodeListM <- 1
+
 	log.Println("Successfully joined storage node cluster.")
-	slist := ""
+	/*slist := ""
 	for i := 0; i < len(ss.nodeList); i++ {
 		res := fmt.Sprintf("{localhost:%v %v}", ss.portnum, ss.nodeid)
 		slist += res
 		if i < len(ss.nodeList)-1 {
-			slist += " "
+		slist += " "
 		}
 	}
-	log.Printf("Server List: [%s]", slist)
-	ss.nodeListM <- 1
-	//fmt.Println("released nodeList lock NewStorageserver")
+	log.Printf("Server List: [%s]", slist)*/
 
-	//non master doesn't keep a node map cause fuck you
+	//now we should tell all other servers about our existance....
+	for _, node := range ss.nodeList {
+		//again we are assuming that none of the node die...
+		servNode, err := rpc.DialHTTP("tcp", node.HostPort)
+		for err != nil {
+			//keep retrying until we can actually conenct
+			//(buddy may not have started yet)
+			servNode, err = rpc.DialHTTP("tcp", node.HostPort)
+			// 	//fmt.Println("Trying to connect to buddy...")
+			time.Sleep(time.Duration(3) * time.Second)
+		}
+		err = servNode.Call("StorageRPC.Register", &args, &reply)
+		for err != nil {
+			//call register on the master node with our info as the args. Kinda weird
+			err = servNode.Call("StorageRPC.Register", &args, &reply)
+			//keep retrying until all things are registered
+			//fmt.Println("Trying to register with master...")
+			time.Sleep(time.Duration(3) * time.Second)
+		}
+		//make sure to close the connection!
+		err = servNode.Close()
+	}
+
+	//now that we have registered with all other nodes and our list of servers is up to date, we 
+	//want to find out which are going to be in our skiplist
+
+	numNodes := len(ss.nodeList)
+
+	jump := numNodes / 4
+
+	if numNodes > 1 {
+		if numNodes <= 5 {
+			//if we have less than five nodes just connect to every other node
+			for _, node := range ss.nodeList {
+				/*right now we are assuming that the buddy node won't fail. need to change for later*/
+				buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
+				for err != nil {
+					//keep retrying until we can actually conenct
+					//(buddy may not have started yet)
+					buddyNode, err = rpc.DialHTTP("tcp", node.HostPort)
+					// 	//fmt.Println("Trying to connect to buddy...")
+					time.Sleep(time.Duration(3) * time.Second)
+				}
+				<-ss.connMapM
+				ss.connMap[node.NodeID] = buddyNode
+				ss.connMapM <- 1
+			}
+		} else {
+			//otherwise it's math time!
+			var buddyList []storageproto.Node
+			for index, node := range ss.nodeList {
+				if node.HostPort == ("localhost:" + strconv.Itoa(portnum)) {
+					buddyList = append(buddyList, ss.nodeList[(index-1)%numNodes])
+					buddyList = append(buddyList, ss.nodeList[(index+1)%numNodes])
+					buddyList = append(buddyList, ss.nodeList[(index+jump)%numNodes])
+					buddyList = append(buddyList, ss.nodeList[(index+2*jump)%numNodes])
+					buddyList = append(buddyList, ss.nodeList[(index+3*jump)%numNodes])
+				}
+			}
+			for _, node := range buddyList {
+				/*right now we are assuming that the buddy node won't fail. need to change for later*/
+				buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
+				for err != nil {
+					//keep retrying until we can actually conenct
+					//(buddy may not have started yet)
+					buddyNode, err = rpc.DialHTTP("tcp", node.HostPort)
+					// 	//fmt.Println("Trying to connect to buddy...")
+					time.Sleep(time.Duration(3) * time.Second)
+				}
+				<-ss.connMapM
+				ss.connMap[node.NodeID] = buddyNode
+				ss.connMapM <- 1
+			}
+		}
+	}
 
 	ss.srpc = storagerpc.NewStorageRPC(ss)
 	rpc.Register(ss.srpc)
-	go ss.GarbageCollector()
+	//go ss.GarbageCollector()
 
-	//fmt.Println("started new server")
-	/*fmt.Println(storageproto.Node{HostPort: "localhost:" + strconv.Itoa(portnum), NodeID: ss.nodeid})
-	fmt.Printf("master? %v\n", ss.isMaster)
-	fmt.Printf("numnodes? %v\n", ss.numNodes)*/
+	// //fmt.Println("started new server")
+	// /*fmt.Println(storageproto.Node{HostPort: "localhost:" + strconv.Itoa(portnum), NodeID: ss.nodeid})
+	// fmt.Printf("master? %v\n", ss.isMaster)
+	// fmt.Printf("numnodes? %v\n", ss.numNodes)*/
 
 	return ss
 }
 
-// Non-master servers to the master
+// called by a new server on all other servers when it joins
 func (ss *Storageserver) RegisterServer(args *storageproto.RegisterArgs, reply *storageproto.RegisterReply) error {
-	//called on master by other servers
-	//first check if that server is alreayd in our map
 
 	//fmt.Println("called register server")
 
-	<-ss.nodeMapM
+	<-ss.nodeListM
 	//fmt.Println("aquired nodeMap lock RegisterServer")
-	_, ok := ss.nodeMap[args.ServerInfo]
+	ok := false
+	for _, node := range ss.nodeList {
+		if node == args.ServerInfo {
+			ok = true
+			break
+		}
+	}
+	ss.nodeListM <- 1
 	//if not we have to add it to the map and to the list
 	if ok != true {
 		//put it in the list
@@ -164,70 +249,73 @@ func (ss *Storageserver) RegisterServer(args *storageproto.RegisterArgs, reply *
 		ss.nodeList = append(ss.nodeList, args.ServerInfo)
 		ss.nodeListM <- 1
 		//fmt.Println("release nodeList lock RegisterServer")
-		//put it in the map w/ it's index in the list just cause whatever bro
-		//map is just easy way to check for duplicates anyway
-		ss.nodeMap[args.ServerInfo] = len(ss.nodeList)
 	}
 
-	//check to see if all nodes have registered
 	<-ss.nodeListM
-	//fmt.Println("aquired nodeList lock RegisterServer")
-	if len(ss.nodeList) == ss.numNodes {
-		//if so we are ready
-		reply.Ready = true
-		log.Println("Successfully joined storage node cluster.")
-		slist := ""
-		for i := 0; i < len(ss.nodeList); i++ {
-			res := fmt.Sprintf("{localhost:%v %v}", ss.portnum, ss.nodeid)
-			slist += res
-			if i < len(ss.nodeList)-1 {
-				slist += " "
+	sort.Sort(byID{ss.nodeList})
+	ss.nodeListM <- 1
+
+	//send back the list of servers
+	reply.Servers = ss.nodeList
+
+	//redo skip list
+
+	<-ss.connMapM
+	for key, _ := range ss.connMap {
+		delete(ss.connMap, key)
+	}
+	ss.connMapM <- 1
+
+	numNodes := len(ss.nodeList)
+
+	jump := numNodes / 4
+
+	if numNodes > 1 {
+		if numNodes <= 5 {
+			//if we have less than five nodes just connect to every other node
+			for _, node := range ss.nodeList {
+				/*right now we are assuming that the buddy node won't fail. need to change for later*/
+				buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
+				for err != nil {
+					//keep retrying until we can actually conenct
+					//(buddy may not have started yet)
+					buddyNode, err = rpc.DialHTTP("tcp", node.HostPort)
+					// 	//fmt.Println("Trying to connect to buddy...")
+					time.Sleep(time.Duration(3) * time.Second)
+				}
+				<-ss.connMapM
+				ss.connMap[node.NodeID] = buddyNode
+				ss.connMapM <- 1
+			}
+		} else {
+			//otherwise it's math time!
+			var buddyList []storageproto.Node
+			for index, node := range ss.nodeList {
+				if node.HostPort == ("localhost:" + strconv.Itoa(ss.portnum)) {
+					buddyList = append(buddyList, ss.nodeList[(index-1)%numNodes])
+					buddyList = append(buddyList, ss.nodeList[(index+1)%numNodes])
+					buddyList = append(buddyList, ss.nodeList[(index+jump)%numNodes])
+					buddyList = append(buddyList, ss.nodeList[(index+2*jump)%numNodes])
+					buddyList = append(buddyList, ss.nodeList[(index+3*jump)%numNodes])
+				}
+			}
+			for _, node := range buddyList {
+				/*right now we are assuming that the buddy node won't fail. need to change for later*/
+				buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
+				for err != nil {
+					//keep retrying until we can actually conenct
+					//(buddy may not have started yet)
+					buddyNode, err = rpc.DialHTTP("tcp", node.HostPort)
+					// 	//fmt.Println("Trying to connect to buddy...")
+					time.Sleep(time.Duration(3) * time.Second)
+				}
+				<-ss.connMapM
+				ss.connMap[node.NodeID] = buddyNode
+				ss.connMapM <- 1
 			}
 		}
-		log.Printf("Server List: [%s]", slist)
-	} else {
-		//if not we aren't ready
-		reply.Ready = false
 	}
 
-	//send back the list of servers anyway
-	reply.Servers = ss.nodeList
-
-	//unlock everything
-	ss.nodeListM <- 1
-	//fmt.Println("released nodeList lock RegisterServer")
-	ss.nodeMapM <- 1
-	//fmt.Println("released nodeMap lock RegisterServer")
-	//NOTE: having these two mutexes may cause weird problems, might want to look into just having one mutex that is used for both the 
-	//node list and the node map since they are baiscally the same thing anyway.
-
-	//fmt.Println(reply.Servers)
-	//fmt.Printf("ready? %v\n", reply.Ready)
-
-	return nil
-}
-
-func (ss *Storageserver) GetServers(args *storageproto.GetServersArgs, reply *storageproto.RegisterReply) error {
-	//this is what libstore calls on the master to get a list of all the servers
-	//if the lenght of the nodeList is the number of nodes then we return ready and the list of nodes
-	//otherwise we return false for ready and the list of nodes we have so far
-	//fmt.Println("called get servers")
-	<-ss.nodeListM
-	//fmt.Println("aquried nodelist lock GetServers")
-	//check to see if all nodes have registered
-	if len(ss.nodeList) == ss.numNodes {
-		//if so we are ready
-		//fmt.Println("we are ready")
-		reply.Ready = true
-	} else {
-		//if not we aren't ready
-		reply.Ready = false
-	}
-
-	//send back the list of servers anyway
-	reply.Servers = ss.nodeList
-
-	ss.nodeListM <- 1
 	return nil
 }
 
@@ -239,7 +327,7 @@ func Storehash(key string) uint32 {
 
 func (ss *Storageserver) checkServer(key string) bool {
 	userclass := strings.Split(key, "?")[0]
-	keyid := Storehash(precolon)
+	keyid := Storehash(userclass)
 
 	if keyid > ss.nodeid {
 		//but we might have wraparound!
@@ -287,7 +375,7 @@ func (ss *Storageserver) checkServer(key string) bool {
 // RPC-able interfaces, bridged via StorageRPC.
 // These should do something! :-)
 
-func (ss *Storageserver) Get(args *storageproto.GetArgs, reply *storageproto.GetReply) error {
+func (ss *Storageserver) iGet(args *storageproto.GetArgs, reply *storageproto.GetReply) error {
 	rightServer := ss.checkServer(args.Key)
 
 	if rightServer == false {
@@ -299,17 +387,17 @@ func (ss *Storageserver) Get(args *storageproto.GetArgs, reply *storageproto.Get
 	val, ok := ss.valMap[args.Key]
 	if ok != true {
 		reply.Status = storageproto.EKEYNOTFOUND
-		reply.Value = ""
+		reply.JSONFile = ""
 	} else {
 		reply.Status = storageproto.OK
-		reply.Value = val
+		reply.JSONFile = val
 	}
 	ss.valMapM <- 1
 
 	return nil
 }
 
-func (ss *Storageserver) Put(args *storageproto.PutArgs, reply *storageproto.PutReply) error {
+func (ss *Storageserver) iPut(args *storageproto.PutArgs, reply *storageproto.PutReply) error {
 	rightServer := ss.checkServer(args.Key)
 
 	if rightServer == false {
@@ -318,14 +406,14 @@ func (ss *Storageserver) Put(args *storageproto.PutArgs, reply *storageproto.Put
 	}
 
 	<-ss.valMapM
-	ss.valMap[args.Key] = args.Value
+	ss.valMap[args.Key] = args.JSONFile
 	ss.valMapM <- 1
 
 	reply.Status = storageproto.OK
 	return nil
 }
 
-func (ss *Storageserver) Delete(args *storageproto.PutArgs, reply *storageproto.PutReply) error {
+func (ss *Storageserver) iDelete(args *storageproto.PutArgs, reply *storageproto.PutReply) error {
 	rightServer := ss.checkServer(args.Key)
 
 	if rightServer == false {
@@ -334,7 +422,7 @@ func (ss *Storageserver) Delete(args *storageproto.PutArgs, reply *storageproto.
 	}
 
 	<-ss.valMapM
-	delete(ss.listMap, args.Key)
+	delete(ss.valMap, args.Key)
 	ss.valMapM <- 1
 
 	reply.Status = storageproto.OK

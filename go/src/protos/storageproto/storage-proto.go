@@ -3,6 +3,8 @@ package storageproto
 //reply constants
 const (
 	OK = iota
+	EWRONGSERVER
+	EKEYNOTFOUND
 )
 
 const (
@@ -64,6 +66,5 @@ type RegisterArgs struct {
 
 // RegisterReply is sent in response to both Register and GetServers
 type RegisterReply struct {
-	Ready   bool
 	Servers []Node
 }
