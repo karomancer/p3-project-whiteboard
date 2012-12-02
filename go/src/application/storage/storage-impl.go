@@ -16,7 +16,7 @@ package storage
 
 import (
 	crand "crypto/rand"
-	"fmt"
+	//"fmt"
 	"hash/fnv"
 	"log"
 	"math"
@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 	"sort"
+	"application/storagerpc"
 )
 
 type Storageserver struct {
@@ -37,13 +38,13 @@ type Storageserver struct {
 	nodeList  []storageproto.Node //list of all other nodes and portnumbers, SORTED
 	nodeListM chan int
 
-	connMap  map[int]*rpc.Client //map from nodeID to connection for your skiplist
+	connMap  map[uint32]*rpc.Client //map from nodeID to connection for your skiplist
 	connMapM chan int
 
 	valMap  map[string]string //map of actual stuff we are storing... I think
 	valMapM chan int
 
-	srpc *Storageserver
+	srpc *storagerpc.StorageRPC
 }
 
 func reallySeedTheDamnRNG() {
@@ -86,7 +87,7 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 	ss.nodeListM = make(chan int, 1)
 	ss.nodeListM <- 1
 
-	ss.connMap = make(map[int]*rpc.Client)
+	ss.connMap = make(map[uint32]*rpc.Client)
 	ss.connMapM = make(chan int, 1)
 	ss.connMapM <- 1
 
@@ -94,7 +95,9 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 	ss.valMapM = make(chan int, 1)
 	ss.valMapM <- 1
 
+
 	/*right now we are assuming that the buddy node won't fail. need to change for later*/
+	buddyNode, err := rpc.DialHTTP("tcp", buddy)
 	for err != nil {
 		//keep retrying until we can actually conenct
 		//(buddy may not have started yet)
@@ -111,7 +114,8 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 	args := storageproto.RegisterArgs{ServerInfo: info}
 	reply := storageproto.RegisterReply{}
 
-	for err != nil || reply.Ready != true {
+	err = buddyNode.Call("StorageRPC.Register", &args, &reply)
+	for err != nil {
 		//call register on the master node with our info as the args. Kinda weird
 		err = buddyNode.Call("StorageRPC.Register", &args, &reply)
 		//keep retrying until all things are registered
@@ -136,16 +140,18 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 	log.Printf("Server List: [%s]", slist)*/
 
 	//now we should tell all other servers about our existance....
-	for index, hostport := range ss.nodeList {
+	for _, node := range ss.nodeList {
 		//again we are assuming that none of the node die...
+		servNode, err := rpc.DialHTTP("tcp", node.HostPort)
 		for err != nil {
 			//keep retrying until we can actually conenct
 			//(buddy may not have started yet)
-			servNode, err = rpc.DialHTTP("tcp", hostport)
+			servNode, err = rpc.DialHTTP("tcp", node.HostPort)
 		// 	//fmt.Println("Trying to connect to buddy...")
 			time.Sleep(time.Duration(3) * time.Second)
 		}
-		for err != nil || reply.Ready != true {
+		err = servNode.Call("StorageRPC.Register", &args, &reply)
+		for err != nil {
 			//call register on the master node with our info as the args. Kinda weird
 			err = servNode.Call("StorageRPC.Register", &args, &reply)
 			//keep retrying until all things are registered
@@ -153,7 +159,7 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 			time.Sleep(time.Duration(3) * time.Second)
 		}
 		//make sure to close the connection!
-		err := serveNode.Close()
+		err = servNode.Close()
 	}
 
 	//now that we have registered with all other nodes and our list of servers is up to date, we 
@@ -166,24 +172,25 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 	if numNodes > 1 {
 		if numNodes <= 5 {
 			//if we have less than five nodes just connect to every other node
-			for index, node := range ss.nodeList {
+			for _, node := range ss.nodeList {
 				/*right now we are assuming that the buddy node won't fail. need to change for later*/
+				buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
 				for err != nil {
 					//keep retrying until we can actually conenct
 					//(buddy may not have started yet)
-					buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
+					buddyNode, err = rpc.DialHTTP("tcp", node.HostPort)
 				// 	//fmt.Println("Trying to connect to buddy...")
 					time.Sleep(time.Duration(3) * time.Second)
 				}
 				<- ss.connMapM
 				ss.connMap[node.NodeID] = buddyNode
-				ss.connMap <- 1
+				ss.connMapM <- 1
 			}
 		} else {
 			//otherwise it's math time!
 			var buddyList []storageproto.Node
-			for index, hostport := range ss.nodeList {
-				if hostport == ("localhost:" + strconv.Itoa(portnum)) {
+			for index, node := range ss.nodeList {
+				if node.HostPort == ("localhost:" + strconv.Itoa(portnum)) {
 					buddyList = append(buddyList, ss.nodeList[(index-1)%numNodes])
 					buddyList = append(buddyList, ss.nodeList[(index+1)%numNodes])
 					buddyList = append(buddyList, ss.nodeList[(index+jump)%numNodes])
@@ -191,18 +198,19 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 					buddyList = append(buddyList, ss.nodeList[(index+3*jump)%numNodes])
 				}
 			}
-			for index, node := range buddyList {
+			for _, node := range buddyList {
 				/*right now we are assuming that the buddy node won't fail. need to change for later*/
+				buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
 				for err != nil {
 					//keep retrying until we can actually conenct
 					//(buddy may not have started yet)
-					buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
+					buddyNode, err = rpc.DialHTTP("tcp", node.HostPort)
 				// 	//fmt.Println("Trying to connect to buddy...")
 					time.Sleep(time.Duration(3) * time.Second)
 				}
 				<- ss.connMapM
 				ss.connMap[node.NodeID] = buddyNode
-				ss.connMap <- 1
+				ss.connMapM <- 1
 			}
 		}
 	}
@@ -227,7 +235,7 @@ func (ss *Storageserver) RegisterServer(args *storageproto.RegisterArgs, reply *
 	<- ss.nodeListM
 	//fmt.Println("aquired nodeMap lock RegisterServer")
 	ok := false
-	for index, node := range ss.nodeList {
+	for _, node := range ss.nodeList {
 		if (node == args.ServerInfo) {
 			ok = true
 			break
@@ -237,14 +245,16 @@ func (ss *Storageserver) RegisterServer(args *storageproto.RegisterArgs, reply *
 	//if not we have to add it to the map and to the list
 	if ok != true {
 		//put it in the list
-		<-ss.nodeListM
+		<- ss.nodeListM
 		//fmt.Println("aquired nodeList lock RegisterServer")
 		ss.nodeList = append(ss.nodeList, args.ServerInfo)
 		ss.nodeListM <- 1
 		//fmt.Println("release nodeList lock RegisterServer")
 	}
 
-	sort.Sort(byID{ss.nodelist})
+	<- ss.nodeListM
+	sort.Sort(byID{ss.nodeList})
+	ss.nodeListM <- 1
 
 	//send back the list of servers
 	reply.Servers = ss.nodeList
@@ -252,7 +262,7 @@ func (ss *Storageserver) RegisterServer(args *storageproto.RegisterArgs, reply *
 	//redo skip list
 
 	<- ss.connMapM 
-		for key, value := range ss.connMap {
+		for key, _ := range ss.connMap {
 			delete(ss.connMap, key)
 		}
 	ss.connMapM <- 1
@@ -264,24 +274,25 @@ func (ss *Storageserver) RegisterServer(args *storageproto.RegisterArgs, reply *
 	if numNodes > 1 {
 		if numNodes <= 5 {
 			//if we have less than five nodes just connect to every other node
-			for index, node := range ss.nodeList {
+			for _, node := range ss.nodeList {
 				/*right now we are assuming that the buddy node won't fail. need to change for later*/
+				buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
 				for err != nil {
 					//keep retrying until we can actually conenct
 					//(buddy may not have started yet)
-					buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
+					buddyNode, err = rpc.DialHTTP("tcp", node.HostPort)
 				// 	//fmt.Println("Trying to connect to buddy...")
 					time.Sleep(time.Duration(3) * time.Second)
 				}
 				<- ss.connMapM
 				ss.connMap[node.NodeID] = buddyNode
-				ss.connMap <- 1
+				ss.connMapM <- 1
 			}
 		} else {
 			//otherwise it's math time!
 			var buddyList []storageproto.Node
-			for index, hostport := range ss.nodeList {
-				if hostport == ("localhost:" + strconv.Itoa(portnum)) {
+			for index, node := range ss.nodeList {
+				if node.HostPort == ("localhost:" + strconv.Itoa(ss.portnum)) {
 					buddyList = append(buddyList, ss.nodeList[(index-1)%numNodes])
 					buddyList = append(buddyList, ss.nodeList[(index+1)%numNodes])
 					buddyList = append(buddyList, ss.nodeList[(index+jump)%numNodes])
@@ -289,18 +300,19 @@ func (ss *Storageserver) RegisterServer(args *storageproto.RegisterArgs, reply *
 					buddyList = append(buddyList, ss.nodeList[(index+3*jump)%numNodes])
 				}
 			}
-			for index, node := range buddyList {
+			for _, node := range buddyList {
 				/*right now we are assuming that the buddy node won't fail. need to change for later*/
+				buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
 				for err != nil {
 					//keep retrying until we can actually conenct
 					//(buddy may not have started yet)
-					buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
+					buddyNode, err = rpc.DialHTTP("tcp", node.HostPort)
 				// 	//fmt.Println("Trying to connect to buddy...")
 					time.Sleep(time.Duration(3) * time.Second)
 				}
 				<- ss.connMapM
 				ss.connMap[node.NodeID] = buddyNode
-				ss.connMap <- 1
+				ss.connMapM <- 1
 			}
 		}
 	}
@@ -316,7 +328,7 @@ func Storehash(key string) uint32 {
 
 func (ss *Storageserver) checkServer(key string) bool {
 	userclass := strings.Split(key, "?")[0]
-	keyid := Storehash(precolon)
+	keyid := Storehash(userclass)
 
 	if keyid > ss.nodeid {
 		//but we might have wraparound!
@@ -364,7 +376,7 @@ func (ss *Storageserver) checkServer(key string) bool {
 // RPC-able interfaces, bridged via StorageRPC.
 // These should do something! :-)
 
-func (ss *Storageserver) Get(args *storageproto.GetArgs, reply *storageproto.GetReply) error {
+func (ss *Storageserver) iGet(args *storageproto.GetArgs, reply *storageproto.GetReply) error {
 	rightServer := ss.checkServer(args.Key)
 
 	if rightServer == false {
@@ -376,17 +388,17 @@ func (ss *Storageserver) Get(args *storageproto.GetArgs, reply *storageproto.Get
 	val, ok := ss.valMap[args.Key]
 	if ok != true {
 		reply.Status = storageproto.EKEYNOTFOUND
-		reply.Value = ""
+		reply.JSONFile = ""
 	} else {
 		reply.Status = storageproto.OK
-		reply.Value = val
+		reply.JSONFile = val
 	}
 	ss.valMapM <- 1
 
 	return nil
 }
 
-func (ss *Storageserver) Put(args *storageproto.PutArgs, reply *storageproto.PutReply) error {
+func (ss *Storageserver) iPut(args *storageproto.PutArgs, reply *storageproto.PutReply) error {
 	rightServer := ss.checkServer(args.Key)
 
 	if rightServer == false {
@@ -395,14 +407,14 @@ func (ss *Storageserver) Put(args *storageproto.PutArgs, reply *storageproto.Put
 	}
 
 	<-ss.valMapM
-	ss.valMap[args.Key] = args.Value
+	ss.valMap[args.Key] = args.JSONFile
 	ss.valMapM <- 1
 
 	reply.Status = storageproto.OK
 	return nil
 }
 
-func (ss *Storageserver) Delete(args *storageproto.PutArgs, reply *storageproto.PutReply) error {
+func (ss *Storageserver) iDelete(args *storageproto.PutArgs, reply *storageproto.PutReply) error {
 	rightServer := ss.checkServer(args.Key)
 
 	if rightServer == false {
@@ -411,7 +423,7 @@ func (ss *Storageserver) Delete(args *storageproto.PutArgs, reply *storageproto.
 	}
 
 	<-ss.valMapM
-	delete(ss.listMap, args.Key)
+	delete(ss.valMap, args.Key)
 	ss.valMapM <- 1
 
 	reply.Status = storageproto.OK

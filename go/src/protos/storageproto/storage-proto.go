@@ -8,6 +8,8 @@ import (
 //reply constants
 const (
 	OK = iota
+	EWRONGSERVER
+	EKEYNOTFOUND
 )
 
 const (
