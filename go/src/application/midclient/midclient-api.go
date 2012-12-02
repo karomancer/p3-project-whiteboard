@@ -36,7 +36,7 @@ func (mc *Midclient) Put(key, data string) error {
 //Should we make another one if the user deletes from the repository?
 //(e.g. professor removes a file, should that sync with user?)
 func (mc *Midclient) Delete(key string) error {
-	return mc.iDeleteFile(key)
+	return mc.iDelete(key)
 }
 
 //This is probably just actually a call to Get/Put from the user client so should be removed

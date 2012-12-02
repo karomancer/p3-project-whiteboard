@@ -129,7 +129,7 @@ func (mc *Midclient) iPut(key string, data string) error {
 //User deleted locally; remove from repository
 //Should we make another one if the user deletes from the repository?
 //(e.g. professor removes a file, should that sync with user?)
-func (mc *Midclient) iDeleteFile(key string) error {
+func (mc *Midclient) iDelete(key string) error {
 	return nil
 }
 
@@ -139,5 +139,4 @@ func (mc *Midclient) iDeleteFile(key string) error {
 //may be used if the user is running out of space
 func (mc *Midclient) iToggleSync(key string) error {
 	return nil
-
 }

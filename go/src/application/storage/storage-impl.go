@@ -59,91 +59,91 @@ func (ss *Storageserver) GarbageCollector() {
 
 func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver {
 
-	// //fmt.Println("called new storage server")
+	//fmt.Println("called new storage server")
 
-	// ss := &Storageserver{}
+	ss := &Storageserver{}
 
-	// //if no nodeid is provided, choose one randomly
-	// if nodeid == 0 {
-	// 	reallySeedTheDamnRNG()
-	// 	ss.nodeid = rand.Uint32()
-	// } else {
-	// 	//otherwise just take the one they gave you
-	// 	ss.nodeid = nodeid
-	// }
+	//if no nodeid is provided, choose one randomly
+	if nodeid == 0 {
+		reallySeedTheDamnRNG()
+		ss.nodeid = rand.Uint32()
+	} else {
+		//otherwise just take the one they gave you
+		ss.nodeid = nodeid
+	}
 
-	// ss.portnum = portnum
+	ss.portnum = portnum
 
-	// ss.nodeList = []storageproto.Node{}
-	// ss.nodeListM = make(chan int, 1)
-	// ss.nodeListM <- 1
+	ss.nodeList = []storageproto.Node{}
+	ss.nodeListM = make(chan int, 1)
+	ss.nodeListM <- 1
 
-	// ss.nodeMap = make(map[storageproto.Node]int)
-	// ss.nodeMapM = make(chan int, 1)
-	// ss.nodeMapM <- 1
+	ss.nodeMap = make(map[storageproto.Node]int)
+	ss.nodeMapM = make(chan int, 1)
+	ss.nodeMapM <- 1
 
-	// ss.connMap = make(map[string]*rpc.Client)
-	// ss.connMapM = make(chan int, 1)
-	// ss.connMapM <- 1
+	ss.connMap = make(map[string]*rpc.Client)
+	ss.connMapM = make(chan int, 1)
+	ss.connMapM <- 1
 
-	// ss.valMap = make(map[string]string)
-	// ss.valMapM = make(chan int, 1)
-	// ss.valMapM <- 1
+	ss.valMap = make(map[string]string)
+	ss.valMapM = make(chan int, 1)
+	ss.valMapM <- 1
 
-	// ss.numNodes = 0
+	ss.numNodes = 0
 
-	// for err != nil {
-	// 	//keep retrying until we can actually conenct
-	// 	//(Master may not have started yet)
-	// 	masterClient, err = rpc.DialHTTP("tcp", master)
-	// 	//fmt.Println("Trying to connect to master...")
-	// 	time.Sleep(time.Duration(3) * time.Second)
-	// }
+	for err != nil {
+		//keep retrying until we can actually conenct
+		//(Master may not have started yet)
+		masterClient, err = rpc.DialHTTP("tcp", master)
+		//fmt.Println("Trying to connect to master...")
+		time.Sleep(time.Duration(3) * time.Second)
+	}
 
-	// //set up args for registering ourselves
-	// info := storageproto.Node{HostPort: "localhost:" + strconv.Itoa(portnum), NodeID: ss.nodeid}
-	// args := storageproto.RegisterArgs{ServerInfo: info}
-	// reply := storageproto.RegisterReply{}
+	//set up args for registering ourselves
+	info := storageproto.Node{HostPort: "localhost:" + strconv.Itoa(portnum), NodeID: ss.nodeid}
+	args := storageproto.RegisterArgs{ServerInfo: info}
+	reply := storageproto.RegisterReply{}
 
-	// for err != nil || reply.Ready != true {
-	// 	//call register on the master node with our info as the args. Kinda weird
-	// 	err = masterClient.Call("StorageRPC.Register", &args, &reply)
-	// 	//keep retrying until all things are registered
-	// 	//fmt.Println("Trying to register with master...")
-	// 	time.Sleep(time.Duration(3) * time.Second)
-	// }
+	for err != nil || reply.Ready != true {
+		//call register on the master node with our info as the args. Kinda weird
+		err = masterClient.Call("StorageRPC.Register", &args, &reply)
+		//keep retrying until all things are registered
+		//fmt.Println("Trying to register with master...")
+		time.Sleep(time.Duration(3) * time.Second)
+	}
 
-	// //gotta still set up some other shits
-	// //like get list of servers from reply maybe?
-	// //spec is pretty vague...
-	// <-ss.nodeListM
-	// //fmt.Println("Aquired nodeList lock NewStorageserver")
-	// ss.nodeList = reply.Servers
-	// log.Println("Successfully joined storage node cluster.")
-	// slist := ""
-	// for i := 0; i < len(ss.nodeList); i++ {
-	// 	res := fmt.Sprintf("{localhost:%v %v}", ss.portnum, ss.nodeid)
-	// 	slist += res
-	// 	if i < len(ss.nodeList)-1 {
-	// 		slist += " "
-	// 	}
-	// }
-	// log.Printf("Server List: [%s]", slist)
-	// ss.nodeListM <- 1
-	// //fmt.Println("released nodeList lock NewStorageserver")
+	//gotta still set up some other shits
+	//like get list of servers from reply maybe?
+	//spec is pretty vague...
+	<-ss.nodeListM
+	//fmt.Println("Aquired nodeList lock NewStorageserver")
+	ss.nodeList = reply.Servers
+	log.Println("Successfully joined storage node cluster.")
+	slist := ""
+	for i := 0; i < len(ss.nodeList); i++ {
+		res := fmt.Sprintf("{localhost:%v %v}", ss.portnum, ss.nodeid)
+		slist += res
+		if i < len(ss.nodeList)-1 {
+			slist += " "
+		}
+	}
+	log.Printf("Server List: [%s]", slist)
+	ss.nodeListM <- 1
+	//fmt.Println("released nodeList lock NewStorageserver")
 
-	// //non master doesn't keep a node map cause fuck you
+	//non master doesn't keep a node map cause fuck you
 
-	// ss.srpc = storagerpc.NewStorageRPC(ss)
-	// rpc.Register(ss.srpc)
-	// go ss.GarbageCollector()
+	ss.srpc = storagerpc.NewStorageRPC(ss)
+	rpc.Register(ss.srpc)
+	go ss.GarbageCollector()
 
-	// //fmt.Println("started new server")
-	// /*fmt.Println(storageproto.Node{HostPort: "localhost:" + strconv.Itoa(portnum), NodeID: ss.nodeid})
-	// fmt.Printf("master? %v\n", ss.isMaster)
-	// fmt.Printf("numnodes? %v\n", ss.numNodes)*/
+	//fmt.Println("started new server")
+	/*fmt.Println(storageproto.Node{HostPort: "localhost:" + strconv.Itoa(portnum), NodeID: ss.nodeid})
+	fmt.Printf("master? %v\n", ss.isMaster)
+	fmt.Printf("numnodes? %v\n", ss.numNodes)*/
 
-	// return ss
+	return ss
 }
 
 // Non-master servers to the master

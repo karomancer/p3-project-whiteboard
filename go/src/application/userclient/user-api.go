@@ -7,7 +7,7 @@ import (
 	"protos/userproto"
 )
 
-func NewUserclient(myhostport string, homedir string) *Userclient {
+func NewUserClient(myhostport string, homedir string) *Userclient {
 	return iNewUserClient(myhostport, homedir)
 }
 

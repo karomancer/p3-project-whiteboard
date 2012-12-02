@@ -1,10 +1,5 @@
 package storageproto
 
-import (
-	"os"
-	"protos/userproto"
-)
-
 //reply constants
 const (
 	OK = iota
@@ -31,17 +26,6 @@ const (
 type Node struct {
 	HostPort string
 	NodeID   uint32
-}
-
-//Keep a list of Syncfiles on the midclient side to remmeber which files are to be
-//synced and which are not
-type SyncFile struct {
-	Owner       *userproto.User
-	Class       string         //classkey owner:class
-	File        *os.File       // if dir, can use "Readdir(0) will return all FileInfos associated with this dir"
-	Files       []string       // nil if not dir, else keys of files
-	Permissions map[string]int //Default permissions if in a preset folder, else can be set for custom folder types
-	Synced      bool
 }
 
 // //Are both Directory and SyncFile structs needed?
