@@ -40,15 +40,13 @@ func iNewMidClient(server string, myhostport string) (*Midclient, error) {
 	return mc, nil
 }
 
-//figures out which server the key hashes to by jumping aroudn the server ring
+//figures out which server the key hashes to by jumping around the server ring
 func (mc *Midclient) getNode(key string) (*rpc.Client, error) {
 	//Store by either user (user has no prefix) or by class@[directory/file] 
 	class := strings.Split(key, "?")[0]
-	keyid := Storehash(class)
+	//keyid := Storehash(class)
 
-	//because as of yet unused....
-	keyid = keyid
-
+	//Check first if its in the cache
 	<-mc.connCacheMutex
 	node, ok := mc.connectionCache[class]
 	mc.connCacheMutex <- 1
@@ -72,12 +70,15 @@ func (mc *Midclient) getNode(key string) (*rpc.Client, error) {
 // * File descriptors (directories)
 func (mc *Midclient) iGet(key string) (string, error) {
 	// Store based on file/directory owner
-
 	//find out which node to contact
 	node, getServerErr := mc.getNode(key)
 	if getServerErr != nil {
 		fmt.Fprintf(os.Stderr, " error in get node\n")
 		return "", getServerErr
+	}
+
+	if node == nil {
+		node = mc.buddy
 	}
 
 	//set up the args with the key
@@ -109,6 +110,10 @@ func (mc *Midclient) iPut(key string, data string) error {
 		return getServerErr
 	}
 
+	if node == nil {
+		node = mc.buddy
+	}
+
 	//set up args and reply
 	args := &storageproto.PutArgs{key, data}
 	var reply storageproto.PutReply
@@ -130,6 +135,29 @@ func (mc *Midclient) iPut(key string, data string) error {
 //Should we make another one if the user deletes from the repository?
 //(e.g. professor removes a file, should that sync with user?)
 func (mc *Midclient) iDelete(key string) error {
+	// Store based on file/directory owner
+	//find out which node to contact
+	node, getServerErr := mc.getNode(key)
+	if getServerErr != nil {
+		fmt.Fprintf(os.Stderr, " error in get node\n")
+		return nil
+	}
+
+	if node == nil {
+		node = mc.buddy
+	}
+
+	//set up the args with the key
+	args := &storageproto.GetArgs{key, mc.hostport}
+	//set up the reply.....
+	var reply storageproto.GetReply
+	//Get that stuff
+	err := node.Call("StorageRPC.Delete", args, &reply)
+	if err != nil {
+		return err
+	}
+
+	//return that stuff
 	return nil
 }
 

@@ -25,8 +25,8 @@ const (
 	CMD_GET
 )
 
-var portnum *int = flag.Int("port", 9009, "port for this midclient to start on")
-var serverAddress *string = flag.String("host", "localhost", "server host to connect to")
+var portnum *int = flag.Int("port", 9010, "port for this midclient to start on")
+var serverAddress *string = flag.String("host", "localhost:9009", "server host to connect to (e.g. localhost:9009)")
 var numTimes *int = flag.Int("n", 1, "Number of times to execute the get or put.")
 
 func main() {
@@ -50,7 +50,7 @@ func main() {
 	cmdlist := []cmd_info{
 		{"p", 2},
 		{"g", 1},
-		{"d", 2},
+		{"d", 1},
 		{"ts", 2},
 	}
 
@@ -66,8 +66,7 @@ func main() {
 	if flag.NArg() < (ci.nargs + 1) {
 		log.Fatal("Insufficient arguments for ", cmd)
 	}
-
-	ls, err := midclient.NewMidClient(net.JoinHostPort(*serverAddress, fmt.Sprintf("%d", *portnum)), "localhost:9009")
+	ls, err := midclient.NewMidClient(*serverAddress, net.JoinHostPort("localhost", fmt.Sprintf("%d", *portnum)))
 	if err != nil {
 		log.Fatal("Could not create a midclient")
 	}
@@ -80,13 +79,17 @@ func main() {
 				val, err := ls.Get(flag.Arg(1))
 				if err != nil {
 					fmt.Println("error: ", err)
+				} else if val == "" {
+					fmt.Println("There is no data at this key!")
 				} else {
-					fmt.Println("  ", val)
+					fmt.Println(val)
 				}
 			case "d":
 				err := ls.Delete(flag.Arg(1))
 				if err != nil {
 					fmt.Println("error: ", err)
+				} else {
+					fmt.Println("Deleted ", flag.Arg(1))
 				}
 			case "ts":
 				err := ls.ToggleSync(flag.Arg(1))

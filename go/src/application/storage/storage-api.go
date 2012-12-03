@@ -18,6 +18,10 @@ func (ss *Storageserver) Put(args *storageproto.PutArgs, reply *storageproto.Put
 	return ss.iPut(args, reply)
 }
 
+func (ss *Storageserver) Delete(args *storageproto.GetArgs, reply *storageproto.GetReply) error {
+	return ss.iDelete(args, reply)
+}
+
 //Returns portnumbers of nodes in skip list (1/2, 1/4, 1/8, ...) in order
 // func (ss *Storageserver) GetSkipList() []int {
 // 	return ss.GetSkipList()
