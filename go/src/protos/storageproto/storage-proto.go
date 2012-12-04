@@ -10,6 +10,7 @@ const (
 	OK = iota
 	EWRONGSERVER
 	EKEYNOTFOUND
+	ENOPERMISSION
 )
 
 const (
@@ -58,6 +59,7 @@ type Node struct {
 // }
 
 type GetArgs struct {
+	Username string
 	Key    string
 	Client string
 }
@@ -68,6 +70,7 @@ type GetReply struct {
 }
 
 type PutArgs struct {
+	Username string
 	Key      string
 	JSONFile string
 }

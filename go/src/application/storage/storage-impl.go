@@ -23,20 +23,6 @@
 
 package storage
 
-// The internal implementation of your storage server.
-// Note:  This file does *not* provide a 'main' interface.  It is used
-// by the 'storageserver' main function we have provided you, which
-// will call storageimpl.NewStorageserver(...).
-//
-// Must implemement NewStorageserver and the RPC-able functions
-// defined in the storagerpc StorageInterface interface.
-
-//TO DO
-//check each key if we are on the right server (rehash and check against our id, and other servers too since we have a list of all servers)
-//leaseTimer
-//other shits
-//like figure out what a server is supposed to print and stuff when it joins and things
-
 import (
 	"application/storagerpc"
 	crand "crypto/rand"
@@ -54,6 +40,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"encoding/json"
 )
 
 type Storageserver struct {
@@ -67,8 +54,11 @@ type Storageserver struct {
 	connMap  map[uint32]*rpc.Client //map from nodeID to connection for your skiplist
 	connMapM chan int
 
-	valMap  map[string]string //map of actual stuff we are storing... I think
-	valMapM chan int
+	fileMap  map[string]storageproto.SyncFile
+	fileMapM chan int
+
+	userMap map[string]string
+	userMapM chan int
 
 	srpc *storagerpc.StorageRPC
 }
@@ -110,9 +100,13 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 	ss.connMapM = make(chan int, 1)
 	ss.connMapM <- 1
 
-	ss.valMap = make(map[string]string)
-	ss.valMapM = make(chan int, 1)
-	ss.valMapM <- 1
+	ss.fileMap = make(map[string]storageproto.SyncFile)
+	ss.fileMapM = make(chan int, 1)
+	ss.fileMapM <- 1
+
+	ss.userMap = make(map[string]string)
+	ss.userMapM = make(chan int, 1)
+	ss.userMapM <- 1
 
 	if buddy == "" {
 		ss.srpc = storagerpc.NewStorageRPC(ss)
@@ -458,16 +452,40 @@ func (ss *Storageserver) iGet(args *storageproto.GetArgs, reply *storageproto.Ge
 		return nil
 	}
 
-	<-ss.valMapM
-	val, ok := ss.valMap[args.Key]
-	if ok != true {
-		reply.Status = storageproto.EKEYNOTFOUND
-		reply.JSONFile = ""
+	if args.Username == "" {
+		<- ss.userMapM
+		val, ok := ss.userMap[args.Key]
+		if ok != true {
+			reply.Status = storageproto.EKEYNOTFOUND
+			reply.JSONFile = ""
+		} else {
+			reply.Status = storageproto.OK
+			reply.JSONFile = val
+		}
+		ss.userMapM <- 1
 	} else {
-		reply.Status = storageproto.OK
-		reply.JSONFile = val
-	}
-	ss.valMapM <- 1
+		<- ss.fileMapM
+		val, ok := ss.fileMap[args.Key]
+		fileJSON, marshalErr := json.Marshal(val)
+		if marshalErr != nil {
+			//log.Fatal("Marshal error\n")
+		}
+		if ok != true {
+			reply.Status = storageproto.EKEYNOTFOUND
+			reply.JSONFile = ""
+		} else {
+			permission, hasPermission := val.Permissions[args.Username]
+
+			if hasPermission == false || permission == storageproto.NONE {
+				reply.Status = storageproto.ENOPERMISSION
+				reply.JSONFile = ""
+			} else {
+				reply.Status = storageproto.OK
+				reply.JSONFile = string(fileJSON)
+			}
+		}
+		ss.fileMapM <- 1
+	} 
 
 	return nil
 }
@@ -485,9 +503,29 @@ func (ss *Storageserver) iPut(args *storageproto.PutArgs, reply *storageproto.Pu
 		return nil
 	}
 
-	<-ss.valMapM
-	ss.valMap[args.Key] = args.JSONFile
-	ss.valMapM <- 1
+	if args.Username == "" {
+		<- ss.userMapM
+		ss.userMap[args.Key] = args.JSONFile
+		ss.userMapM <- 1
+	} else {
+		var file storageproto.SyncFile
+		fileBytes := []byte(args.JSONFile)
+		unmarshalErr := json.Unmarshal(fileBytes, &file)
+		if unmarshalErr != nil {
+			//fmt.Println("Unmarshal error!\n")
+		}
+
+		permission, hasPermission := file.Permissions[args.Username]
+
+		if hasPermission == false || (hasPermission == true && permission != storageproto.WRITE) {
+			reply.Status = storageproto.ENOPERMISSION
+			return nil
+		}
+
+		<- ss.fileMapM
+		ss.fileMap[args.Key] = file
+		ss.fileMapM <- 1
+	}
 
 	reply.Status = storageproto.OK
 	return nil
@@ -505,9 +543,27 @@ func (ss *Storageserver) iDelete(args *storageproto.GetArgs, reply *storageproto
 		return nil
 	}
 
-	<-ss.valMapM
-	delete(ss.valMap, args.Key)
-	ss.valMapM <- 1
+	if args.Username == "" {
+		<-ss.userMapM
+		delete(ss.userMap, args.Key)
+		ss.userMapM <- 1
+	} else {
+
+		<- ss.fileMapM
+		file, ok := ss.fileMap[args.Key]
+		ss.fileMapM <- 1
+
+		if ok == true {
+			if args.Username != file.Owner.Username {
+				reply.Status = storageproto.ENOPERMISSION
+				return nil
+			}
+		}
+
+		<-ss.fileMapM
+		delete(ss.fileMap, args.Key)
+		ss.fileMapM <- 1
+	}
 
 	reply.Status = storageproto.OK
 	return nil
