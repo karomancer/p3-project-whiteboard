@@ -370,7 +370,6 @@ func (ss *Storageserver) checkServer(key string) (*rpc.Client, bool) {
 	fmt.Printf("Predecessor index:%v\n", predecessor)
 
 	if (keyid < ss.nodeList[ss.nodeIndex].NodeID && ss.nodeIndex == 0) ||
-		(keyid > ss.nodeList[ss.nodeIndex].NodeID && ss.nodeIndex == len(ss.nodeList)-1) ||
 		(keyid > ss.nodeList[predecessor].NodeID && keyid <= ss.nodeList[ss.nodeIndex].NodeID) {
 		fmt.Println("This is the correct server")
 		return nil, true

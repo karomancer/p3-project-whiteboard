@@ -19,6 +19,11 @@ func (uc *Userclient) AuthenticateUser(args *userproto.AuthenticateUserArgs, rep
 	return uc.iAuthenticateUser(args, reply)
 }
 
+//Make a class. Automatically makes directories for Lectures, Assignments, etc
+func (uc *Userclient) MakeClass(args *userproto.MakeClassArgs, reply *userproto.MakeClassReply) error {
+	return uc.iMakeClass(args, reply)
+}
+
 //Things get pushed to the user automatically, but in case it's acting funny the user can also 
 //manually ask for a sync
 func (uc *Userclient) Sync() error {
@@ -34,4 +39,8 @@ func (uc *Userclient) ToggleSync(args *userproto.ToggleSyncArgs, reply *userprot
 //Can change/add/remove permissions
 func (uc *Userclient) EditPermissions(args *userproto.EditPermissionsArgs, reply *userproto.EditPermissionsReply) error {
 	return uc.iEditPermissions(args, reply)
+}
+
+func (uc *Userclient) IsLoggedIn() string {
+	return uc.iIsLoggedIn()
 }

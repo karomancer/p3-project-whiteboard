@@ -44,9 +44,9 @@ func (uc *Userclient) iCreateUser(args *userproto.CreateUserArgs, reply *userpro
 		return nil
 	}
 	//check to see if Username already exists
-	_, exists := uc.midclient.Get(args.Username)
+	getUser, _ := uc.midclient.Get(args.Username)
 	//if it doesn't we are good to go
-	if exists == nil {
+	if getUser == "" {
 		//make new user
 		//LATER: should actually hash the password before we store it.....
 		user := &userproto.User{Username: args.Username, Password: args.Password, Email: args.Email, Classes: make(map[string]int)}
@@ -62,6 +62,24 @@ func (uc *Userclient) iCreateUser(args *userproto.CreateUserArgs, reply *userpro
 		}
 		//set the current user of the session to the one we just created
 		uc.user = user
+
+		dirErr := os.MkdirAll(uc.homedir, os.ModeDir)
+		if dirErr != nil {
+			return dirErr
+		}
+
+		watcher, watchErr := fsnotify.NewWatcher()
+		if watchErr != nil {
+			log.Fatal(watchErr)
+		}
+
+		go uc.iMonitorLocalChanges(watcher)
+		watchErr = watcher.Watch(uc.homedir)
+
+		if watchErr != nil {
+			log.Fatal(watchErr)
+		}
+
 		reply.Status = userproto.OK
 		return nil
 	}
@@ -77,7 +95,7 @@ func (uc *Userclient) iWalkDirectoryStructure(keypath string) {
 	filepath := uc.homedir + strings.Join(strings.Split(keyend, "?"), "/")
 
 	fileJSON, _ := uc.midclient.Get(keypath)
-	var file userproto.SyncFile
+	var file storageproto.SyncFile
 	fileBytes := []byte(fileJSON)
 	json.Unmarshal(fileBytes, &file)
 
@@ -110,34 +128,43 @@ func (uc *Userclient) iAuthenticateUser(args *userproto.AuthenticateUserArgs, re
 			reply.Status = userproto.OK
 			//Get user data for temporary session
 			uc.user = user
+			file, readErr := os.Open(uc.homedir)
+			if readErr != nil {
+				dirErr := os.MkdirAll(uc.homedir, os.ModeDir)
+				if dirErr != nil {
+					return dirErr
+				}
+			} else {
+				file.Close()
+			}
 			for classkey, _ := range uc.user.Classes {
 				//It doesn't make sense for it to not exist
 				classJSON, _ := uc.midclient.Get(classkey)
 
-				var class userproto.SyncFile
+				var class storageproto.SyncFile
 				classBytes := []byte(classJSON)
 				unmarshalErr = json.Unmarshal(classBytes, &class)
 				if unmarshalErr != nil {
 					return unmarshalErr
 				}
-				go uc.iWalkDirectoryStructure(classkey) // creates cache of available files
 
+				go uc.iWalkDirectoryStructure(classkey) // creates cache of available files				
 			}
 		} else {
 			reply.Status = userproto.WRONGPASSWORD
 			return nil
 		}
-		// watcher, watchErr := fsnotify.NewWatcher()
-		// if wat	chErr != nil {
-		// 	log.Fatal(watchErr)
-		// }
+		watcher, watchErr := fsnotify.NewWatcher()
+		if watchErr != nil {
+			log.Fatal(watchErr)
+		}
 
-		// go uc.iMonitorLocalChanges(watcher)
-		// watchErr = watcher.Watch(uc.homedir)
+		go uc.iMonitorLocalChanges(watcher)
+		watchErr = watcher.Watch(uc.homedir)
 
-		// if watchErr != nil {
-		// 	log.Fatal(watchErr)
-		// }
+		if watchErr != nil {
+			log.Fatal(watchErr)
+		}
 
 		// go uc.iInitialFileCheck() // updates outdated file on local on login
 
@@ -153,14 +180,53 @@ func (uc *Userclient) iMonitorLocalChanges(watcher *fsnotify.Watcher) {
 	for {
 		select {
 		case ev := <-watcher.Event:
-			fmt.Println("Event: ", ev)
+			if ev.IsCreate() || ev.IsModify() {
+
+				//Making the key at which to store the Syncfile.
+				//First, take the path (given by watcher.Event) and parse out the /'s to replace with ?'s
+				patharray := strings.Split(ev.Name, "/")
+				foundWhite := false
+				var i int
+				for i = 0; foundWhite == false && i < len(patharray); i++ {
+					if patharray[i] == "whiteboard" {
+						foundWhite = true
+					}
+				}
+				// The key is user:class?path to file (delimited by ?'s')
+				intermed := strings.Join(patharray[i:], "?")
+				class := patharray[i]
+				fmt.Println("Class ", class)
+				key := fmt.Sprintf("%v:%v", uc.user.Username, intermed)
+				key = key
+				file, fileErr := os.Open(ev.Name)
+				if fileErr != nil {
+					fmt.Printf("Error opening %v\n", ev.Name)
+					break
+				}
+				// syncFile := storageproto.SyncFile{Owner: uc.user, Class: class, File: file, Files: , Permissions: , Synced: true} 
+				file.Close()
+				fmt.Printf("Create Event: %v\n", ev)
+			} else if ev.IsDelete() {
+				fmt.Printf("Delete Event: %v\n", ev)
+			} else if ev.IsRename() {
+				fmt.Printf("Rename Event: %v\n", ev)
+			}
 		case err := <-watcher.Error:
 			fmt.Println("File error: ", err)
 		}
 	}
 }
 
-func (uc *Userclient) iPush(key string, file *userproto.SyncFile) {
+func (uc *Userclient) iMakeClass(args *userproto.MakeClassArgs, reply *userproto.MakeClassReply) error {
+	_, fileErr := os.Open(args.Classname)
+	if fileErr != nil {
+		fmt.Println("Doesn't exist!")
+	}
+	reply.Status = userproto.EEXISTS
+	return nil
+}
+
+func (uc *Userclient) iPush(key string, file *storageproto.SyncFile) {
 	if file.Synced == true {
 		fileJSON, marshalErr := json.Marshal(file)
 		if marshalErr != nil {
@@ -173,13 +239,13 @@ func (uc *Userclient) iPush(key string, file *userproto.SyncFile) {
 	}
 }
 
-func (uc *Userclient) iGet(key string) *userproto.SyncFile {
+func (uc *Userclient) iGet(key string) *storageproto.SyncFile {
 	JSON, getErr := uc.midclient.Get(key)
 	if getErr != nil {
 		fmt.Println("GetErr! Does not exist!\n")
 		return nil
 	}
-	var file userproto.SyncFile
+	var file storageproto.SyncFile
 	fileBytes := []byte(JSON)
 	unmarshalErr := json.Unmarshal(fileBytes, &file)
 	if unmarshalErr != nil {
@@ -208,7 +274,7 @@ func (uc *Userclient) iInitialFileCheck() {
 				syncfileJSON, getErr := uc.midclient.Get(filekey)
 				if getErr == nil {
 					//If no errors, get file off of server to compare
-					var syncFile *userproto.SyncFile
+					var syncFile *storageproto.SyncFile
 					syncBytes := []byte(syncfileJSON)
 					_ = json.Unmarshal(syncBytes, &syncFile)
 					// if unmarshalErr == nil { fmt.Println("Unmarshal error.\n") }
@@ -259,7 +325,7 @@ func (uc *Userclient) iInitialFileCheck() {
 					newowner := uc.user.Username + ":" + strings.Split(class, ":")[1]
 					newkey := newowner + strings.Split(filekey, ":")[1]
 
-					syncFile := &userproto.SyncFile{Owner: uc.user, Class: class, File: file, Permissions: permissions, Synced: true}
+					syncFile := &storageproto.SyncFile{Owner: uc.user, Class: class, File: file, Permissions: permissions, Synced: true}
 					uc.iPush(newkey, syncFile)
 
 					parentkey := strings.Join(dirarray[0:len(dirarray)-2], "?")
@@ -272,7 +338,7 @@ func (uc *Userclient) iInitialFileCheck() {
 							file.Close()
 							return
 						}
-						parentFile = &userproto.SyncFile{Owner: uc.user, Class: class, File: parentFd, Files: []string{}, Permissions: permissions, Synced: true}
+						parentFile = &storageproto.SyncFile{Owner: uc.user, Class: class, File: parentFd, Files: []string{}, Permissions: permissions, Synced: true}
 					}
 					if parentFile.Files == nil {
 						parentFile.Files = []string{}
@@ -338,7 +404,7 @@ func (uc *Userclient) iEditPermissions(args *userproto.EditPermissionsArgs, repl
 		return getErr
 	}
 	//unmarshal that shit
-	var file userproto.SyncFile
+	var file storageproto.SyncFile
 	fileBytes := []byte(jfile)
 	unmarshalErr := json.Unmarshal(fileBytes, &file)
 	if unmarshalErr != nil {
@@ -388,4 +454,11 @@ func (uc *Userclient) iEditPermissions(args *userproto.EditPermissionsArgs, repl
 	reply.Status = userproto.OK
 
 	return nil
+}
+
+func (uc *Userclient) iIsLoggedIn() string {
+	if (uc.user != nil) && (uc.user != &userproto.User{}) {
+		return uc.user.Username
+	}
+	return ""
 }

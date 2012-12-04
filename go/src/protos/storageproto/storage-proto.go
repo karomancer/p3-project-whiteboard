@@ -1,5 +1,10 @@
 package storageproto
 
+import (
+	"os"
+	"protos/userproto"
+)
+
 //reply constants
 const (
 	OK = iota
@@ -24,6 +29,17 @@ const (
 	COPY         //r/w a copy of the file: when students can write to their own copy of the file which then syncs to the teacher but does not overwrite the teacher's original file
 	NONE         //signals that we should remove user from permission list
 )
+
+//Keep a list of Syncfiles on the midclient side to remmeber which files are to be
+//synced and which are not
+type SyncFile struct {
+	Owner       *userproto.User
+	Class       string         //classkey owner:class
+	File        *os.File       // if dir, can use "Readdir(0) will return all FileInfos associated with this dir"
+	Files       []string       // nil if not dir, else keys of files
+	Permissions map[string]int //Default permissions if in a preset folder, else can be set for custom folder types
+	Synced      bool
+}
 
 type Node struct {
 	HostPort string
