@@ -16,8 +16,8 @@ func NewMidClient(server string, myhostport string) (*Midclient, error) {
 // * Classes
 // * File descriptors (files)
 // * File descriptors (directories)
-func (mc *Midclient) Get(key string) (string, error) {
-	return mc.iGet(key)
+func (mc *Midclient) Get(key, username string) (string, error) {
+	return mc.iGet(key, username)
 }
 
 //Put covers basic Syncing as well
@@ -27,16 +27,16 @@ func (mc *Midclient) Get(key string) (string, error) {
 //Can also be used to make directories
 //and users
 //(FileMode) IsDir can tell if its a directory...in FileInfo
-func (mc *Midclient) Put(key, data string) error {
-	return mc.iPut(key, data)
+func (mc *Midclient) Put(key, data, username string) error {
+	return mc.iPut(key, data, username)
 }
 
 //*** Initially, don't implement this shit ***/
 //User deleted locally; remove from repository
 //Should we make another one if the user deletes from the repository?
 //(e.g. professor removes a file, should that sync with user?)
-func (mc *Midclient) Delete(key string) error {
-	return mc.iDelete(key)
+func (mc *Midclient) Delete(key, username string) error {
+	return mc.iDelete(key, username)
 }
 
 //This is probably just actually a call to Get/Put from the user client so should be removed

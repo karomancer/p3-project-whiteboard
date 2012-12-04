@@ -44,7 +44,7 @@ func (uc *Userclient) iCreateUser(args *userproto.CreateUserArgs, reply *userpro
 		return nil
 	}
 	//check to see if Username already exists
-	getUser, _ := uc.midclient.Get(args.Username)
+	getUser, _ := uc.midclient.Get(args.Username, "")
 	//if it doesn't we are good to go
 	if getUser == "" {
 		//make new user
@@ -56,7 +56,7 @@ func (uc *Userclient) iCreateUser(args *userproto.CreateUserArgs, reply *userpro
 			return marshalErr
 		}
 		//send it to the server
-		createErr := uc.midclient.Put(args.Username, string(userjson))
+		createErr := uc.midclient.Put(args.Username, string(userjson), "")
 		if createErr != nil {
 			return createErr
 		}
@@ -94,7 +94,7 @@ func (uc *Userclient) iWalkDirectoryStructure(keypath string) {
 	keyend := strings.Split(keypath, ":")[1]
 	filepath := uc.homedir + strings.Join(strings.Split(keyend, "?"), "/")
 
-	fileJSON, _ := uc.midclient.Get(keypath)
+	fileJSON, _ := uc.midclient.Get(keypath, uc.user.Username)
 	var file storageproto.SyncFile
 	fileBytes := []byte(fileJSON)
 	json.Unmarshal(fileBytes, &file)
@@ -112,7 +112,7 @@ func (uc *Userclient) iWalkDirectoryStructure(keypath string) {
 }
 
 func (uc *Userclient) iAuthenticateUser(args *userproto.AuthenticateUserArgs, reply *userproto.AuthenticateUserReply) error {
-	userJSON, exists := uc.midclient.Get(args.Username)
+	userJSON, exists := uc.midclient.Get(args.Username, "")
 	if exists == nil {
 		var user *userproto.User
 		jsonBytes := []byte(userJSON)
@@ -139,7 +139,7 @@ func (uc *Userclient) iAuthenticateUser(args *userproto.AuthenticateUserArgs, re
 			}
 			for classkey, _ := range uc.user.Classes {
 				//It doesn't make sense for it to not exist
-				classJSON, _ := uc.midclient.Get(classkey)
+				classJSON, _ := uc.midclient.Get(classkey, uc.user.Username)
 
 				var class storageproto.SyncFile
 				classBytes := []byte(classJSON)
@@ -232,9 +232,10 @@ func (uc *Userclient) iMakeClass(args *userproto.MakeClassArgs, reply *userproto
 	if file == nil {
 
 		reply.Status = userproto.OK
-		return nil
+	} else {
+		reply.Status = userproto.EEXISTS
 	}
-	reply.Status = userproto.EEXISTS
+	file.Close()
 	return nil
 }
 
@@ -244,7 +245,7 @@ func (uc *Userclient) iPush(key string, file *storageproto.SyncFile) {
 		if marshalErr != nil {
 			log.Fatal("Marshal error\n")
 		}
-		createErr := uc.midclient.Put(key, string(fileJSON))
+		createErr := uc.midclient.Put(key, string(fileJSON), uc.user.Username)
 		if createErr != nil {
 			fmt.Println("Server put error!\n")
 		}
@@ -252,7 +253,7 @@ func (uc *Userclient) iPush(key string, file *storageproto.SyncFile) {
 }
 
 func (uc *Userclient) iGet(key string) *storageproto.SyncFile {
-	JSON, getErr := uc.midclient.Get(key)
+	JSON, getErr := uc.midclient.Get(key, uc.user.Username)
 	if getErr != nil {
 		fmt.Println("GetErr! Does not exist!\n")
 		return nil
@@ -283,7 +284,7 @@ func (uc *Userclient) iInitialFileCheck() {
 		} else {
 			fileinfo, statErr := file.Stat()
 			if statErr == nil {
-				syncfileJSON, getErr := uc.midclient.Get(filekey)
+				syncfileJSON, getErr := uc.midclient.Get(filekey, uc.user.Username)
 				if getErr == nil {
 					//If no errors, get file off of server to compare
 					var syncFile *storageproto.SyncFile
@@ -411,7 +412,7 @@ func (uc *Userclient) iEditPermissions(args *userproto.EditPermissionsArgs, repl
 	//LATER: can also cache this info if we are acessing it frequently to reduce RPC calls
 	//chances are in real life however that this won't be acessed very frequently from any particular user
 	//so may be safe to ignore that case
-	jfile, getErr := uc.midclient.Get(key)
+	jfile, getErr := uc.midclient.Get(key, uc.user.Username)
 	if getErr != nil {
 		return getErr
 	}
@@ -441,7 +442,7 @@ func (uc *Userclient) iEditPermissions(args *userproto.EditPermissionsArgs, repl
 			}
 		} else {
 			//otherwise we have to check if the dude is a valid dude
-			_, exists := uc.midclient.Get(args.Users[i])
+			_, exists := uc.midclient.Get(args.Users[i], "")
 			//if he is then we can add him to the list
 			if exists != nil {
 				//if the permission is NONE then just don't add him
@@ -458,7 +459,7 @@ func (uc *Userclient) iEditPermissions(args *userproto.EditPermissionsArgs, repl
 		return marshalErr
 	}
 
-	err := uc.midclient.Put(key, string(filejson))
+	err := uc.midclient.Put(key, string(filejson), uc.user.Username)
 	if err != nil {
 		return err
 	}

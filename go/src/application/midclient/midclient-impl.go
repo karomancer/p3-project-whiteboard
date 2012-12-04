@@ -68,7 +68,7 @@ func (mc *Midclient) getNode(key string) (*rpc.Client, error) {
 // * users
 // * File descriptors (files)
 // * File descriptors (directories)
-func (mc *Midclient) iGet(key string) (string, error) {
+func (mc *Midclient) iGet(key, username string) (string, error) {
 	// Store based on file/directory owner
 	//find out which node to contact
 	node, getServerErr := mc.getNode(key)
@@ -82,7 +82,7 @@ func (mc *Midclient) iGet(key string) (string, error) {
 	}
 
 	//set up the args with the key
-	args := &storageproto.GetArgs{key, mc.hostport}
+	args := &storageproto.GetArgs{key, mc.hostport, username}
 	//set up the reply.....
 	var reply storageproto.GetReply
 	//Get that stuff
@@ -102,7 +102,7 @@ func (mc *Midclient) iGet(key string) (string, error) {
 //Can also be used to make directories
 //and users
 //(FileMode) IsDir can tell if its a directory...in FileInfo
-func (mc *Midclient) iPut(key string, data string) error {
+func (mc *Midclient) iPut(key string, data, username string) error {
 	//figure out who we gotta talk to 
 	node, getServerErr := mc.getNode(key)
 	if getServerErr != nil {
@@ -115,7 +115,7 @@ func (mc *Midclient) iPut(key string, data string) error {
 	}
 
 	//set up args and reply
-	args := &storageproto.PutArgs{key, data}
+	args := &storageproto.PutArgs{key, data, username}
 	var reply storageproto.PutReply
 
 	//actually put the stuff
@@ -134,7 +134,7 @@ func (mc *Midclient) iPut(key string, data string) error {
 //User deleted locally; remove from repository
 //Should we make another one if the user deletes from the repository?
 //(e.g. professor removes a file, should that sync with user?)
-func (mc *Midclient) iDelete(key string) error {
+func (mc *Midclient) iDelete(key, username string) error {
 	// Store based on file/directory owner
 	//find out which node to contact
 	node, getServerErr := mc.getNode(key)
@@ -148,7 +148,7 @@ func (mc *Midclient) iDelete(key string) error {
 	}
 
 	//set up the args with the key
-	args := &storageproto.GetArgs{key, mc.hostport}
+	args := &storageproto.GetArgs{key, mc.hostport, username}
 	//set up the reply.....
 	var reply storageproto.GetReply
 	//Get that stuff

@@ -73,6 +73,7 @@ type PutArgs struct {
 	Username string
 	Key      string
 	JSONFile string
+	Username string
 }
 
 type PutReply struct {
