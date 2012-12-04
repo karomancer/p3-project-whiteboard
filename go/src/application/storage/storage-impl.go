@@ -1,3 +1,26 @@
+/*LIZ TODO:
+-check for node failure
+-deal with node failure
+	-route to differnt people
+	-update nodeList and connMap(skiplist)
+	-delt with on the userclient side:
+		-recover lost files
+		-need to check with midclients who connect if we have all their files
+		-if not, put those files
+-keep track of people who have acess to a file so we can propogate
+	-how the fuck do we even do this what
+		-push file json to midclient, midclient pushes to userclient
+-check that permissions stuff works
+	-every time recieve a put, check permissions and update list
+		-only person who owns file can change permissions
+	-when recieving a put, check if we already have file
+		-if yes can overwrite if person has overwrite permissions
+		-if they don't return some error
+	-when fulfilling a get, check permissions to see if person has acess to file
+-keep track of connections to midclients and what users they are associated with
+-auto push changes to files to relevant users
+*/
+
 package storage
 
 // The internal implementation of your storage server.
@@ -237,14 +260,17 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 	rpc.Register(ss.srpc)
 	fmt.Println("Storage server started. My NodeID is", ss.nodeid)
 	fmt.Printf("I am aware of the following nodes: %v\n", ss.nodeList)
+	go ss.iCalculateSkipList()
+
 	//go ss.GarbageCollector()
 
 	return ss
 }
 
-func (ss *Storageserver) CalculateSkipList() {
+func (ss *Storageserver) iCalculateSkipList() {
 	<-ss.connMapM
 	for key, _ := range ss.connMap {
+		ss.connMap[key].Close()
 		delete(ss.connMap, key)
 	}
 	ss.connMapM <- 1
@@ -253,7 +279,7 @@ func (ss *Storageserver) CalculateSkipList() {
 
 	jump := numNodes / 4
 
-	if numNodes <= 5 {
+	if numNodes <= 6 {
 		//if we have less than five nodes just connect to every other node
 		// fmt.Println("nodes less than 5!")
 		for _, node := range ss.nodeList {
@@ -274,17 +300,23 @@ func (ss *Storageserver) CalculateSkipList() {
 			}
 		}
 	} else {
+		fmt.Println("making a buddyList by math since there are more than six nodes")
 		//otherwise it's math time!
 		var buddyList []storageproto.Node
-		for index, node := range ss.nodeList {
-			if node.NodeID != ss.nodeid && node.HostPort == ("localhost:"+strconv.Itoa(ss.portnum)) {
-				buddyList = append(buddyList, ss.nodeList[(index-1)%numNodes])
-				buddyList = append(buddyList, ss.nodeList[(index+1)%numNodes])
-				buddyList = append(buddyList, ss.nodeList[(index+jump)%numNodes])
-				buddyList = append(buddyList, ss.nodeList[(index+2*jump)%numNodes])
-				buddyList = append(buddyList, ss.nodeList[(index+3*jump)%numNodes])
-			}
+		index := ss.nodeIndex
+		fmt.Println("index, index+1, index-1, index+jump, index+2*jump, index+3*jump all mod numNodes")
+		fmt.Println(index, (index-1)%numNodes, (index+1)%numNodes, (index+jump)%numNodes, (index+2*jump)%numNodes, (index+3*jump)%numNodes)
+		first := index - 1
+		if first < 0 {
+			first = -first
 		}
+		buddyList = append(buddyList, ss.nodeList[(first)%numNodes])
+		buddyList = append(buddyList, ss.nodeList[(index+1)%numNodes])
+		buddyList = append(buddyList, ss.nodeList[(index+jump)%numNodes])
+		buddyList = append(buddyList, ss.nodeList[(index+2*jump)%numNodes])
+		buddyList = append(buddyList, ss.nodeList[(index+3*jump)%numNodes])
+		fmt.Println("figued out who is in buddyList")
+
 		fmt.Println("Buddy node won't fail. Check for other shit")
 		for _, node := range buddyList {
 			if node.NodeID != ss.nodeid {
@@ -304,6 +336,7 @@ func (ss *Storageserver) CalculateSkipList() {
 		}
 	}
 	fmt.Printf("I am aware of the following nodes: %v\n", ss.nodeList)
+	fmt.Printf("What I think my buddy list is %v\n", ss.connMap)
 }
 
 // called by a new server on all other servers when it joins
@@ -342,7 +375,7 @@ func (ss *Storageserver) RegisterServer(args *storageproto.RegisterArgs, reply *
 	reply.Servers = ss.nodeList
 
 	//redo skip list
-	go ss.CalculateSkipList()
+	go ss.iCalculateSkipList()
 	return nil
 }
 
@@ -355,6 +388,7 @@ func Storehash(key string) uint32 {
 func (ss *Storageserver) checkServer(key string) (*rpc.Client, bool) {
 	userclass := strings.Split(key, "?")[0]
 	keyid := Storehash(userclass)
+
 	fmt.Printf("\nStorehash: %v\nServehash: %v\n\n", keyid, ss.nodeid)
 	fmt.Printf("What I think the node array is %v\n", ss.nodeList)
 	fmt.Printf("What I think my buddy list is %v\n", ss.connMap)
@@ -370,21 +404,42 @@ func (ss *Storageserver) checkServer(key string) (*rpc.Client, bool) {
 	fmt.Printf("Predecessor index:%v\n", predecessor)
 
 	if (keyid < ss.nodeList[ss.nodeIndex].NodeID && ss.nodeIndex == 0) ||
+		(keyid > ss.nodeList[len(ss.nodeList)-1].NodeID && ss.nodeIndex == 0) ||
 		(keyid > ss.nodeList[predecessor].NodeID && keyid <= ss.nodeList[ss.nodeIndex].NodeID) {
 		fmt.Println("This is the correct server")
 		return nil, true
 	}
+
 	fmt.Println("OHFUCK Either the wrong server or this number is at the end of the circle.")
 
 	for nodeId, nodeClient := range ss.connMap {
+		fmt.Println("finding another node to give it to. Checking: ", nodeId)
 		if keyid < nodeId {
+			for nodeId2, _ := range ss.connMap {
+				if nodeId > nodeId2 && keyid < nodeId2 {
+					nodeId = nodeId2
+				}
+			}
+			fmt.Println("nodeID of node I'm passing it to is: ", nodeId)
 			return nodeClient, false
 		}
 	}
-	// if the value is out of the circle (way bigger than anything in the ring)
-	//put it on the first node
-	//this shouldn't work for any other examples
-	//NOTE need tests
+
+	//if we get down here, this means that the key hit wraparound, so we should send it to the lowest nodeId in the skiplist
+	lowestNodeId := ss.nodeList[len(ss.nodeList)-1].NodeID
+	for nodeId, _ := range ss.connMap {
+		if nodeId < lowestNodeId {
+			lowestNodeId = nodeId
+		}
+	}
+	for nodeId, nodeClient := range ss.connMap {
+		if nodeId == lowestNodeId {
+			return nodeClient, false
+		}
+	}
+
+	fmt.Println("couldn't find another guy to give it to!")
+	//Uh, should never get here hopefully
 	return nil, true
 }
 
