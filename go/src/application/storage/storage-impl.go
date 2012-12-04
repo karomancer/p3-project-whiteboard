@@ -10,13 +10,13 @@
 -keep track of people who have acess to a file so we can propogate
 	-how the fuck do we even do this what
 		-push file json to midclient, midclient pushes to userclient
--check that permissions stuff works
-	-every time recieve a put, check permissions and update list
-		-only person who owns file can change permissions
-	-when recieving a put, check if we already have file
-		-if yes can overwrite if person has overwrite permissions
-		-if they don't return some error
-	-when fulfilling a get, check permissions to see if person has acess to file
+√check that permissions stuff works
+	√every time recieve a put, check permissions and update list (this is in usrclient)
+		√only person who owns file can change permissions
+	√when recieving a put, check if we already have file
+		√if yes can overwrite if person has overwrite permissions
+		√if they don't return some error
+	√when fulfilling a get, check permissions to see if person has acess to file
 -keep track of connections to midclients and what users they are associated with
 -auto push changes to files to relevant users
 */
@@ -50,6 +50,9 @@ type Storageserver struct {
 	nodeIndex int                 // index in nodeList
 	nodeList  []storageproto.Node //list of all other nodes and portnumbers, SORTED
 	nodeListM chan int
+
+	deadNodeList []storageproto.Node
+	deadNodeListM chan int
 
 	connMap  map[uint32]*rpc.Client //map from nodeID to connection for your skiplist
 	connMapM chan int
@@ -96,6 +99,10 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 	ss.nodeListM = make(chan int, 1)
 	ss.nodeListM <- 1
 
+	ss.deadNodeList = []storageproto.Node{}
+	ss.deadNodeListM = make(chan int, 1)
+	ss.deadNodeListM <- 1
+
 	ss.connMap = make(map[uint32]*rpc.Client)
 	ss.connMapM = make(chan int, 1)
 	ss.connMapM <- 1
@@ -132,6 +139,7 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 	args := storageproto.RegisterArgs{ServerInfo: info}
 	reply := storageproto.RegisterReply{}
 
+	/*registering with buddy node, who we are assuming doesn't die at this point....*/
 	fmt.Println("Registering in New")
 	err = buddyNode.Call("StorageRPC.Register", &args, &reply)
 	fmt.Println("Finished dialing in New")
@@ -149,97 +157,21 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 	ss.nodeListM <- 1
 
 	log.Println("Successfully joined storage node cluster.")
-	/*slist := ""
-	for i := 0; i < len(ss.nodeList); i++ {
-		res := fmt.Sprintf("{localhost:%v %v}", ss.portnum, ss.nodeid)
-		slist += res
-		if i < len(ss.nodeList)-1 {
-		slist += " "
-		}
-	}
-	log.Printf("Server List: [%s]", slist)*/
 
 	//now we should tell all other servers about our existance....
 	for _, node := range ss.nodeList {
 		//again we are assuming that none of the node die...
 		if node.NodeID != ss.nodeid {
-			servNode, err := rpc.DialHTTP("tcp", node.HostPort)
-			for err != nil {
-				//keep retrying until we can actually connect
-				//(buddy may not have started yet)
-				servNode, err = rpc.DialHTTP("tcp", node.HostPort)
-				// 	//fmt.Println("Trying to connect to buddy...")
-				time.Sleep(time.Duration(3) * time.Second)
-			}
-			err = servNode.Call("StorageRPC.Register", &args, &reply)
-			for err != nil {
-				//call register on the master node with our info as the args. Kinda weird
-				err = servNode.Call("StorageRPC.Register", &args, &reply)
-				//keep retrying until all things are registered
-				//fmt.Println("Trying to register with master...")
-				time.Sleep(time.Duration(3) * time.Second)
-			}
+			nodeConnection, _ := ss.dialNode(node)
+			ss.registerWithNode(node, nodeConnection, args, reply)
 			//make sure to close the connection!
-			err = servNode.Close()
+			err = nodeConnection.Close()
 		}
 	}
 
-	//now that we have registered with all other nodes and our list of servers is up to date, we 
-	//want to find out which are going to be in our skiplist
+	go ss.collectBodies()
 
-	numNodes := len(ss.nodeList)
 
-	jump := numNodes / 4
-
-	if numNodes > 1 {
-		if numNodes <= 5 {
-			//if we have less than five nodes just connect to every other node
-			for _, node := range ss.nodeList {
-				if node.NodeID != ss.nodeid {
-					/*right now we are assuming that the buddy node won't fail. need to change for later*/
-					buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
-					for err != nil {
-						//keep retrying until we can actually conenct
-						//(buddy may not have started yet)
-						buddyNode, err = rpc.DialHTTP("tcp", node.HostPort)
-						// 	//fmt.Println("Trying to connect to buddy...")
-						time.Sleep(time.Duration(3) * time.Second)
-					}
-					<-ss.connMapM
-					ss.connMap[node.NodeID] = buddyNode
-					ss.connMapM <- 1
-				}
-			}
-		} else {
-			//otherwise it's math time!
-			var buddyList []storageproto.Node
-			for index, node := range ss.nodeList {
-				if node.NodeID != ss.nodeid && node.HostPort == ("localhost:"+strconv.Itoa(portnum)) {
-					buddyList = append(buddyList, ss.nodeList[(index-1)%numNodes])
-					buddyList = append(buddyList, ss.nodeList[(index+1)%numNodes])
-					buddyList = append(buddyList, ss.nodeList[(index+jump)%numNodes])
-					buddyList = append(buddyList, ss.nodeList[(index+2*jump)%numNodes])
-					buddyList = append(buddyList, ss.nodeList[(index+3*jump)%numNodes])
-				}
-			}
-			for _, node := range buddyList {
-				/*right now we are assuming that the buddy node won't fail. need to change for later*/
-				buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
-				if node.NodeID != ss.nodeid {
-					for err != nil {
-						//keep retrying until we can actually conenct
-						//(buddy may not have started yet)
-						buddyNode, err = rpc.DialHTTP("tcp", node.HostPort)
-						// 	//fmt.Println("Trying to connect to buddy...")
-						time.Sleep(time.Duration(3) * time.Second)
-					}
-					<-ss.connMapM
-					ss.connMap[node.NodeID] = buddyNode
-					ss.connMapM <- 1
-				}
-			}
-		}
-	}
 	<-ss.nodeListM
 	sort.Sort(byID{ss.nodeList})
 	for i := 0; i < len(ss.nodeList); i++ {
@@ -261,6 +193,75 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 	return ss
 }
 
+//function to clean up dead nodes
+func (ss *Storageserver) collectBodies() { 
+
+	<- ss.deadNodeListM
+
+	if len(ss.deadNodeList) == 0 {
+		ss.deadNodeListM <- 1
+		return
+	}
+
+	for _, deadNode := range ss.deadNodeList {
+		<- ss.nodeListM
+		for index, node := range ss.nodeList {
+			if deadNode.NodeID == node.NodeID {
+				ss.nodeList = append(ss.nodeList[:index], ss.nodeList[index + 1])
+			}
+		}
+		ss.nodeListM <- 1
+	}
+	ss.deadNodeList = []storageproto.Node{}
+	ss.deadNodeListM <- 1
+
+	go ss.iCalculateSkipList()
+}
+
+//function to make connections with nodes and check for failure
+func (ss *Storageserver) dialNode(node storageproto.Node) (*rpc.Client, bool) {
+	nodeClient, err := rpc.DialHTTP("tcp", node.HostPort)
+	tries := 5
+	for tries > 0 && err != nil {
+		//keep retrying until we can actually conenct
+		//(buddy may not have started yet)
+		nodeClient, err = rpc.DialHTTP("tcp", node.HostPort)
+		time.Sleep(time.Duration(3) * time.Second)
+	}
+	if err != nil {
+
+		<- ss.deadNodeListM
+		ss.deadNodeList = append(ss.deadNodeList, node)
+		ss.deadNodeListM <- 1
+
+		return nil, false
+	}
+
+	return nodeClient, true
+}
+
+//function to register with other nodes and check to make sure they aren't dead
+func (ss *Storageserver) registerWithNode(node storageproto.Node, servNode *rpc.Client, args storageproto.RegisterArgs, reply storageproto.RegisterReply) bool {
+	err := servNode.Call("StorageRPC.Register", &args, &reply)
+	tries := 5
+	for tries > 0 && err != nil {
+		//call register on the master node with our info as the args. Kinda weird
+		err = servNode.Call("StorageRPC.Register", &args, &reply)
+		//keep retrying until all things are registered
+		//fmt.Println("Trying to register with master...")
+		time.Sleep(time.Duration(3) * time.Second)
+	}
+	if err != nil {
+		<- ss.deadNodeListM
+		ss.deadNodeList = append(ss.deadNodeList, node)
+		ss.deadNodeListM <- 1
+
+		return false
+	}
+
+	return true
+}
+
 func (ss *Storageserver) iCalculateSkipList() {
 	<-ss.connMapM
 	for key, _ := range ss.connMap {
@@ -278,28 +279,18 @@ func (ss *Storageserver) iCalculateSkipList() {
 		// fmt.Println("nodes less than 5!")
 		for _, node := range ss.nodeList {
 			if node.NodeID != ss.nodeid {
-				/*right now we are assuming that the buddy node won't fail. need to change for later*/
-				// fmt.Printf("Dialing %v from %v...\n", node.HostPort, ss.portnum)
-				buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
-				// fmt.Println("Successful dial!...\n")
-				for err != nil {
-					//keep retrying until we can actually conenct
-					//(buddy may not have started yet)
-					buddyNode, err = rpc.DialHTTP("tcp", node.HostPort)
-					time.Sleep(time.Duration(3) * time.Second)
-				}
+				buddyNode, _ := ss.dialNode(node)
 				<-ss.connMapM
 				ss.connMap[node.NodeID] = buddyNode
 				ss.connMapM <- 1
 			}
 		}
+		go ss.collectBodies()
 	} else {
 		fmt.Println("making a buddyList by math since there are more than six nodes")
 		//otherwise it's math time!
 		var buddyList []storageproto.Node
 		index := ss.nodeIndex
-		fmt.Println("index, index+1, index-1, index+jump, index+2*jump, index+3*jump all mod numNodes")
-		fmt.Println(index, (index-1)%numNodes, (index+1)%numNodes, (index+jump)%numNodes, (index+2*jump)%numNodes, (index+3*jump)%numNodes)
 		first := index - 1
 		if first < 0 {
 			first = -first
@@ -311,23 +302,15 @@ func (ss *Storageserver) iCalculateSkipList() {
 		buddyList = append(buddyList, ss.nodeList[(index+3*jump)%numNodes])
 		fmt.Println("figued out who is in buddyList")
 
-		fmt.Println("Buddy node won't fail. Check for other shit")
 		for _, node := range buddyList {
 			if node.NodeID != ss.nodeid {
-				/*right now we are assuming that the buddy node won't fail. need to change for later*/
-				buddyNode, err := rpc.DialHTTP("tcp", node.HostPort)
-				for err != nil {
-					//keep retrying until we can actually conenct
-					//(buddy may not have started yet)
-					buddyNode, err = rpc.DialHTTP("tcp", node.HostPort)
-					// 	//fmt.Println("Trying to connect to buddy...")
-					time.Sleep(time.Duration(3) * time.Second)
-				}
+				buddyNode, _ := ss.dialNode(node)
 				<-ss.connMapM
 				ss.connMap[node.NodeID] = buddyNode
 				ss.connMapM <- 1
 			}
 		}
+		go ss.collectBodies()
 	}
 	fmt.Printf("I am aware of the following nodes: %v\n", ss.nodeList)
 	fmt.Printf("What I think my buddy list is %v\n", ss.connMap)
