@@ -25,6 +25,7 @@ import (
 	"math/rand"
 	"net"
 	"net/rpc"
+	// "packages/lsplog"
 	"protos/storageproto"
 	"sort"
 	"strconv"
@@ -374,15 +375,18 @@ func (ss *Storageserver) checkServer(key string) (*rpc.Client, bool) {
 		fmt.Println("This is the correct server")
 		return nil, true
 	}
-	fmt.Println("OHFUCK TOTALLY NOT THE RIGHT SERVER")
+	fmt.Println("OHFUCK Either the wrong server or this number is at the end of the circle.")
 
 	for nodeId, nodeClient := range ss.connMap {
 		if keyid < nodeId {
 			return nodeClient, false
 		}
 	}
-	fmt.Println("Shit it got put here didn't it...")
-	return nil, true // this is actually an error....
+	// if the value is out of the circle (way bigger than anything in the ring)
+	//put it on the first node
+	//this shouldn't work for any other examples
+	//NOTE need tests
+	return nil, true
 }
 
 // RPC-able interfaces, bridged via StorageRPC.

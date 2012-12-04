@@ -7,8 +7,8 @@ import (
 	"protos/userproto"
 )
 
-func NewUserClient(myhostport string, homedir string) *Userclient {
-	return iNewUserClient(myhostport, homedir)
+func NewUserClient(myhostport string, buddy string, homedir string) *Userclient {
+	return iNewUserClient(myhostport, buddy, homedir)
 }
 
 func (uc *Userclient) CreateUser(args *userproto.CreateUserArgs, reply *userproto.CreateUserReply) error {

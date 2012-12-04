@@ -23,17 +23,18 @@ type Userclient struct {
 	fileKeyMap   map[string]string //From local file path to its full storage key for quick searching
 }
 
-func iNewUserClient(myhostport string, homedir string) *Userclient {
+func iNewUserClient(myhostport string, buddy string, homedir string) *Userclient {
 	//WARNING!!!! PUT TEMP STRING AS ARG BECAUSE NO IDEA HOW WE ARE SUPPOSED TO KNOW WHAT
 	//SERVER TO CONNECT TO FROM THIS SIDE....
-	mclient, err := midclient.NewMidClient("server", myhostport)
+	mclient, err := midclient.NewMidClient(buddy, myhostport)
 	if err != nil {
 		return nil
 	}
 	mutex := make(chan int, 1)
 	mutex <- 1
 	filecheck := make(chan int)
-	return &Userclient{homedir: homedir, fileCheck: filecheck, hostport: myhostport, midclient: mclient, fileKeyMutex: mutex, fileKeyMap: make(map[string]string)}
+	user := &userproto.User{}
+	return &Userclient{homedir: homedir, fileCheck: filecheck, hostport: myhostport, midclient: mclient, fileKeyMutex: mutex, fileKeyMap: make(map[string]string), user: user}
 }
 
 func (uc *Userclient) iCreateUser(args *userproto.CreateUserArgs, reply *userproto.CreateUserReply) error {
@@ -94,7 +95,7 @@ func (uc *Userclient) iWalkDirectoryStructure(keypath string) {
 
 func (uc *Userclient) iAuthenticateUser(args *userproto.AuthenticateUserArgs, reply *userproto.AuthenticateUserReply) error {
 	userJSON, exists := uc.midclient.Get(args.Username)
-	if exists != nil {
+	if exists == nil {
 		var user *userproto.User
 		jsonBytes := []byte(userJSON)
 		//unmarshall the data
@@ -126,19 +127,19 @@ func (uc *Userclient) iAuthenticateUser(args *userproto.AuthenticateUserArgs, re
 			reply.Status = userproto.WRONGPASSWORD
 			return nil
 		}
-		watcher, watchErr := fsnotify.NewWatcher()
-		if watchErr != nil {
-			log.Fatal(watchErr)
-		}
+		// watcher, watchErr := fsnotify.NewWatcher()
+		// if wat	chErr != nil {
+		// 	log.Fatal(watchErr)
+		// }
 
-		go uc.iMonitorLocalChanges(watcher)
-		watchErr = watcher.Watch(uc.homedir)
+		// go uc.iMonitorLocalChanges(watcher)
+		// watchErr = watcher.Watch(uc.homedir)
 
-		if watchErr != nil {
-			log.Fatal(watchErr)
-		}
+		// if watchErr != nil {
+		// 	log.Fatal(watchErr)
+		// }
 
-		go uc.iInitialFileCheck() // updates outdated file on local on login
+		// go uc.iInitialFileCheck() // updates outdated file on local on login
 
 		return nil
 	}
