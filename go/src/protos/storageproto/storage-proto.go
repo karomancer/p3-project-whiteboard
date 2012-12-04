@@ -58,8 +58,9 @@ type Node struct {
 // }
 
 type GetArgs struct {
-	Key    string
-	Client string
+	Key      string
+	Client   string
+	Username string
 }
 
 type GetReply struct {
@@ -70,6 +71,7 @@ type GetReply struct {
 type PutArgs struct {
 	Key      string
 	JSONFile string
+	Username string
 }
 
 type PutReply struct {
