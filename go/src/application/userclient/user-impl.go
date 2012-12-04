@@ -218,9 +218,21 @@ func (uc *Userclient) iMonitorLocalChanges(watcher *fsnotify.Watcher) {
 }
 
 func (uc *Userclient) iMakeClass(args *userproto.MakeClassArgs, reply *userproto.MakeClassReply) error {
-	_, fileErr := os.Open(args.Classname)
+	cdErr := os.Chdir(uc.homedir)
+	if cdErr != nil {
+		return cdErr
+	}
+
+	file, fileErr := os.Open(args.Classname)
+	fmt.Printf("%v\n", file)
 	if fileErr != nil {
-		fmt.Println("Doesn't exist!")
+		return fileErr
+	}
+	//if the file doesn't already exist, make class!
+	if file == nil {
+
+		reply.Status = userproto.OK
+		return nil
 	}
 	reply.Status = userproto.EEXISTS
 	return nil

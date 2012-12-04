@@ -106,9 +106,7 @@ func main() {
 				}
 				reply := &userproto.MakeClassReply{}
 				err := client.MakeClass(&userproto.MakeClassArgs{cmdarray[1]}, reply)
-				if err != nil {
-					fmt.Println("")
-				}
+				PrintStatus(ci.funcname, reply.Status, err)
 			case "ts": //toggle sync
 				if len(cmdarray) != 2 {
 					fmt.Println("Insufficient arguments to Toggle Sync.\nCorrect usage: ts <filename>")
@@ -169,7 +167,7 @@ func StatusToString(status int) string {
 	case userproto.ENOSUCHFILE:
 		return "No such file exists"
 	case userproto.EEXISTS:
-		return "User already exists"
+		return "User/Class already exists"
 	}
 	return "Unknown error"
 }
