@@ -18,6 +18,7 @@ type StorageInterface interface {
 	Get(*storageproto.GetArgs, *storageproto.GetReply) error
 	Put(*storageproto.PutArgs, *storageproto.PutReply) error
 	Delete(*storageproto.GetArgs, *storageproto.GetReply) error
+	TransferData(*storageproto.TransferArgs, *storageproto.TransferReply) error
 }
 
 type StorageRPC struct {
@@ -42,6 +43,10 @@ func (srpc *StorageRPC) Delete(args *storageproto.GetArgs, reply *storageproto.G
 
 func (srpc *StorageRPC) Register(args *storageproto.RegisterArgs, reply *storageproto.RegisterReply) error {
 	return srpc.ss.RegisterServer(args, reply)
+}
+
+func (srpc *StorageRPC) Transfer(args *storageproto.TransferArgs, reply *storageproto.TransferReply) error {
+	return srpc.ss.TransferData(args, reply)
 }
 
 /*func (srpc *StorageRPC) GetServers(args *storageproto.GetServersArgs, reply *storageproto.RegisterReply) error {
