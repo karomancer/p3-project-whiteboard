@@ -35,9 +35,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage of %s  <command>:\n", os.Args[0])
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\n")
-		fmt.Fprintf(os.Stderr, "   commands:  p  key val  (put)\n")
-		fmt.Fprintf(os.Stderr, "              g  key      (get)\n")
-		fmt.Fprintf(os.Stderr, "              d  key val  (delete)\n")
+		fmt.Fprintf(os.Stderr, "   commands:  p  usr key val  (put)\n")
+		fmt.Fprintf(os.Stderr, "              g  usr key      (get)\n")
+		fmt.Fprintf(os.Stderr, "              d  usr key val  (delete)\n")
 		fmt.Fprintf(os.Stderr, "              ts  key val  (toggle sync)\n")
 	}
 

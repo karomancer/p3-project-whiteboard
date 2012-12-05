@@ -82,7 +82,7 @@ func (mc *Midclient) iGet(key, username string) (string, error) {
 	}
 
 	//set up the args with the key
-	args := &storageproto.GetArgs{key, mc.hostport, username}
+	args := &storageproto.GetArgs{username, key, mc.hostport}
 	//set up the reply.....
 	var reply storageproto.GetReply
 	//Get that stuff
@@ -115,7 +115,7 @@ func (mc *Midclient) iPut(key string, data, username string) error {
 	}
 
 	//set up args and reply
-	args := &storageproto.PutArgs{key, data, username}
+	args := &storageproto.PutArgs{username, key, data}
 	var reply storageproto.PutReply
 
 	//actually put the stuff
@@ -148,7 +148,7 @@ func (mc *Midclient) iDelete(key, username string) error {
 	}
 
 	//set up the args with the key
-	args := &storageproto.GetArgs{key, mc.hostport, username}
+	args := &storageproto.GetArgs{username, key, mc.hostport}
 	//set up the reply.....
 	var reply storageproto.GetReply
 	//Get that stuff

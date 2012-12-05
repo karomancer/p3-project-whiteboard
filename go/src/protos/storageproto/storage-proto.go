@@ -9,6 +9,7 @@ const (
 	OK = iota
 	EWRONGSERVER
 	EKEYNOTFOUND
+	ENOPERMISSION
 )
 
 const (
@@ -58,9 +59,9 @@ type Node struct {
 // }
 
 type GetArgs struct {
+	Username string
 	Key      string
 	Client   string
-	Username string
 }
 
 type GetReply struct {
@@ -69,9 +70,9 @@ type GetReply struct {
 }
 
 type PutArgs struct {
+	Username string
 	Key      string
 	JSONFile string
-	Username string
 }
 
 type PutReply struct {
@@ -85,4 +86,14 @@ type RegisterArgs struct {
 // RegisterReply is sent in response to both Register and GetServers
 type RegisterReply struct {
 	Servers []Node
+}
+
+type TransferArgs struct {
+	ToNode Node
+}
+
+type TransferReply struct {
+	Status  int
+	FileMap map[string]string
+	UserMap map[string]string
 }

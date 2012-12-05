@@ -331,25 +331,16 @@ func (uc *Userclient) iMonitorLocalChanges() {
 					uc.iPush(key, syncFile)
 					//Get parent to add to Files list
 					parentfilepath := uc.homedir + "/" + strings.Join(patharray[:(len(patharray)-1)], "/")
-					fmt.Println(parentfilepath)
 					<-uc.fileKeyMutex
 					//parent has to be in map...otherwise this would make literally 0 sense
 					parentkeyperm, _ := uc.fileKeyMap[parentfilepath]
+					fmt.Println("My parent: ", parentfilepath)
 					uc.fileKeyMutex <- 1
 					parentSync := uc.iGet(parentkeyperm.Key)
 					if parentSync != nil {
-						fmt.Println("My parent exists at key %v", parentkeyperm.Key)
 						parentSync.Files = append(parentSync.Files, key)
 						uc.iPush(parentkeyperm.Key, parentSync)
 					}
-					//also add to file
-					<-uc.permkeyFileMutex
-					toFile := fmt.Sprintf("%v %v %v:%v\n", ev.Name, key, uc.user.Username, storageproto.WRITE)
-					_, writeErr := uc.permkeyFile.WriteString(toFile)
-					if writeErr != nil {
-						fmt.Println("Write error!")
-					}
-					uc.permkeyFileMutex <- 1
 				} else {
 					permissions = existSyncFile.Permissions
 				}
@@ -358,6 +349,15 @@ func (uc *Userclient) iMonitorLocalChanges() {
 					os.Chdir("..")
 				}
 				file.Close()
+
+				//also add to file
+				<-uc.permkeyFileMutex
+				toFile := fmt.Sprintf("%v %v %v:%v\n", ev.Name, key, uc.user.Username, storageproto.WRITE)
+				_, writeErr := uc.permkeyFile.WriteString(toFile)
+				if writeErr != nil {
+					fmt.Println("Write error!")
+				}
+				uc.permkeyFileMutex <- 1
 
 				//Hash for easy access later
 				uc.fileKeyMap[ev.Name] = KeyPermissions{key, permissions}
@@ -468,7 +468,6 @@ func (uc *Userclient) iGet(key string) *storageproto.SyncFile {
 }
 
 func (uc *Userclient) iWalkDownClass(key string) {
-	fmt.Println("Walk down class!")
 	syncFile := uc.iGet(key)
 	if syncFile != nil {
 		keyend := strings.Split(key, ":")[1]
@@ -476,19 +475,14 @@ func (uc *Userclient) iWalkDownClass(key string) {
 		filename := strings.Join(pathArray, "/")
 
 		_, openErr := os.Open(filename)
-		fmt.Println("Open exists!")
 		if openErr != nil { //then it doesn't exist (path error)
-			fmt.Println("All the cd's")
 			<-uc.wdChangeMutex
 			//if directory, make a directory
 			//either way, make the monitor local changes function take care of most things
-			fmt.Println("Testing Dir!")
-			wd, _ := os.Getwd()
-			fmt.Println("Working directory: ", wd)
-			fmt.Println(filename)
 			if syncFile.Files != nil {
-				fmt.Println("Is dir!")
 				dirErr := os.MkdirAll(filename, os.ModeDir)
+				fmt.Println("Walking filename to watch: ", filename)
+				uc.watcher.Watch(filename)
 				if dirErr != nil {
 					return
 				}
