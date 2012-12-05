@@ -87,3 +87,13 @@ type RegisterArgs struct {
 type RegisterReply struct {
 	Servers []Node
 }
+
+type TransferArgs struct {
+	ToNode Node
+}
+
+type TransferReply struct {
+	Status int
+	FileMap map[string]string
+	UserMap map[string]string
+}

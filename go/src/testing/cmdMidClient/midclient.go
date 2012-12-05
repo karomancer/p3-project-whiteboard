@@ -34,9 +34,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage of %s  <command>:\n", os.Args[0])
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\n")
-		fmt.Fprintf(os.Stderr, "   commands:  p  key val  (put)\n")
-		fmt.Fprintf(os.Stderr, "              g  key      (get)\n")
-		fmt.Fprintf(os.Stderr, "              d  key val  (delete)\n")
+		fmt.Fprintf(os.Stderr, "   commands:  p  usr key val  (put)\n")
+		fmt.Fprintf(os.Stderr, "              g  usr key      (get)\n")
+		fmt.Fprintf(os.Stderr, "              d  usr key val  (delete)\n")
 		fmt.Fprintf(os.Stderr, "              ts  key val  (toggle sync)\n")
 	}
 
@@ -76,7 +76,7 @@ func main() {
 		case "g", "d", "ts":
 			switch cmd {
 			case "g":
-				val, err := ls.Get(flag.Arg(1))
+				val, err := ls.Get(flag.Arg(1), flag.Arg(2))
 				if err != nil {
 					fmt.Println("error: ", err)
 				} else if val == "" {
@@ -85,7 +85,7 @@ func main() {
 					fmt.Println(val)
 				}
 			case "d":
-				err := ls.Delete(flag.Arg(1))
+				err := ls.Delete(flag.Arg(1), flag.Arg(2))
 				if err != nil {
 					fmt.Println("error: ", err)
 				} else {
@@ -98,7 +98,7 @@ func main() {
 				}
 			}
 		case "p":
-			err := ls.Put(flag.Arg(1), flag.Arg(2))
+			err := ls.Put(flag.Arg(1), flag.Arg(2), flag.Arg(3))
 			switch err {
 			case nil:
 				fmt.Println("OK")
