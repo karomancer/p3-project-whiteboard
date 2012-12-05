@@ -25,6 +25,7 @@ const (
 	CMD_GET
 )
 
+var username *string = flag.String("user", "kechow", "user who is calling this function")
 var portnum *int = flag.Int("port", 9010, "port for this midclient to start on")
 var serverAddress *string = flag.String("host", "localhost:9009", "server host to connect to (e.g. localhost:9009)")
 var numTimes *int = flag.Int("n", 1, "Number of times to execute the get or put.")
@@ -76,7 +77,7 @@ func main() {
 		case "g", "d", "ts":
 			switch cmd {
 			case "g":
-				val, err := ls.Get(flag.Arg(1), flag.Arg(2))
+				val, err := ls.Get(flag.Arg(1), *username)
 				if err != nil {
 					fmt.Println("error: ", err)
 				} else if val == "" {
@@ -85,7 +86,7 @@ func main() {
 					fmt.Println(val)
 				}
 			case "d":
-				err := ls.Delete(flag.Arg(1), flag.Arg(2))
+				err := ls.Delete(flag.Arg(1), *username)
 				if err != nil {
 					fmt.Println("error: ", err)
 				} else {
@@ -98,7 +99,7 @@ func main() {
 				}
 			}
 		case "p":
-			err := ls.Put(flag.Arg(1), flag.Arg(2), flag.Arg(3))
+			err := ls.Put(flag.Arg(1), flag.Arg(2), *username)
 			switch err {
 			case nil:
 				fmt.Println("OK")

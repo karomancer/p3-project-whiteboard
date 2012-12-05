@@ -1,7 +1,6 @@
 package storageproto
 
 import (
-	"os"
 	"protos/userproto"
 )
 
@@ -35,9 +34,10 @@ const (
 //synced and which are not
 type SyncFile struct {
 	Owner       *userproto.User
-	Class       string         //classkey owner:class
-	File        *os.File       // if dir, can use "Readdir(0) will return all FileInfos associated with this dir"
-	Files       []string       // nil if not dir, else keys of files
+	Class       string   //classkey owner:class
+	Contents    []byte   // if dir, can use "Readdir(0) will return all FileInfos associated with this dir"
+	Files       []string // nil if not dir, else keys of files
+	UpdateTime  int
 	Permissions map[string]int //Default permissions if in a preset folder, else can be set for custom folder types
 	Synced      bool
 }
@@ -60,8 +60,8 @@ type Node struct {
 
 type GetArgs struct {
 	Username string
-	Key    string
-	Client string
+	Key      string
+	Client   string
 }
 
 type GetReply struct {
@@ -93,7 +93,7 @@ type TransferArgs struct {
 }
 
 type TransferReply struct {
-	Status int
+	Status  int
 	FileMap map[string]string
 	UserMap map[string]string
 }

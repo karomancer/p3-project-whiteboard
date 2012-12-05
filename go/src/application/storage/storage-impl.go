@@ -31,7 +31,7 @@ package storage
 import (
 	"application/storagerpc"
 	crand "crypto/rand"
-	"//fmt"
+	"fmt"
 	"hash/fnv"
 	"log"
 	"math"
@@ -40,12 +40,12 @@ import (
 	"net"
 	"net/rpc"
 	// "packages/lsplog"
+	"encoding/json"
 	"protos/storageproto"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-	"encoding/json"
 )
 
 type Storageserver struct {
@@ -66,6 +66,7 @@ type Storageserver struct {
 	fileMapM chan int
 
 	userMap map[string]string //map to store userdata, stored as json because we don't need to actually access it on this side
+
 	userMapM chan int
 
 	srpc *storagerpc.StorageRPC
@@ -208,7 +209,7 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 	//now we need to check if we need to take any data from already existing nodes 
 	//because some of thier old data may now hash into our range instead
 	fromNodeIndex := 0
-	if ss.nodeIndex == len(ss.nodeList) - 1 {
+	if ss.nodeIndex == len(ss.nodeList)-1 {
 		fromNodeIndex = 0
 	} else {
 		fromNodeIndex = ss.nodeIndex + 1
@@ -228,9 +229,7 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 		nodeConn.Call("StorageRPC.Transfer", transferArgs, &transferReply)
 		////fmt.Println("done getting data, now adding to our stores")
 
-		//now we store the data in our maps
-		//userdata
-		<- ss.userMapM
+		<-ss.userMapM
 		for key, val := range transferReply.UserMap {
 			ss.userMap[key] = val
 		}
@@ -238,6 +237,7 @@ func iNewStorageserver(buddy string, portnum int, nodeid uint32) *Storageserver 
 
 		//file data
 		<- ss.fileMapM
+
 		for key, val := range transferReply.FileMap {
 			//have to unmarshal because we actually need to access this info
 			var file storageproto.SyncFile
@@ -302,6 +302,7 @@ func (ss *Storageserver) TransferData(args *storageproto.TransferArgs, reply *st
 	//look through our files to find out what we need to transfer
 	<- ss.fileMapM
 	////fmt.Println("starting to transfer files")
+
 	reply.FileMap = make(map[string]string)
 	for key, file := range ss.fileMap {
 		userclass := strings.Split(key, "?")[0]
@@ -343,7 +344,7 @@ func (ss *Storageserver) TransferData(args *storageproto.TransferArgs, reply *st
 
 	reply.Status = storageproto.OK
 	return nil
-} 
+}
 
 //function to clean up dead connections
 func (ss *Storageserver) collectBodies() {
@@ -364,15 +365,17 @@ func (ss *Storageserver) collectBodies() {
 
 	//otherwise, for each dead node
 	for _, deadNode := range ss.deadNodeList {
+
 		//fmt.Println("attempting to lock node list")
 		<-ss.nodeListM
 		//fmt.Println("locked node list")
 		//check in the nodeList
+
 		for index, node := range ss.nodeList {
 			//if it's in the node list we better delete it
 			if deadNode.NodeID == node.NodeID {
-				if index < len(ss.nodeList) - 1 {
-					ss.nodeList = append(ss.nodeList[:index], ss.nodeList[index + 1])
+				if index < len(ss.nodeList)-1 {
+					ss.nodeList = append(ss.nodeList[:index], ss.nodeList[index+1])
 				} else {
 					ss.nodeList = ss.nodeList[:index]
 				}
@@ -430,7 +433,7 @@ func (ss *Storageserver) dialNode(node storageproto.Node) (*rpc.Client, bool) {
 				break
 			}
 			time.Sleep(time.Duration(3) * time.Second)
-			tries --
+			tries--
 		}
 	}
 
@@ -478,7 +481,7 @@ func (ss *Storageserver) registerWithNode(node storageproto.Node, servNode *rpc.
 				break
 			}
 			time.Sleep(time.Duration(3) * time.Second)
-			tries --
+			tries--
 		}
 	}
 
@@ -689,12 +692,6 @@ func (ss *Storageserver) checkServer(key string) (storageproto.Node, *rpc.Client
 	ss.nodeListM <- 1
 	//fmt.Println("unlocked nodelist")
 
-
-	////fmt.Printf("\nStorehash: %v\nServehash: %v\n\n", keyid, ss.nodeid)
-	////fmt.Printf("What I think the node list is %v\n", ss.nodeList)
-	////fmt.Printf("What I think my buddy list is %v\n", ss.connMap)
-	////fmt.Printf("Node index: %v\n", ss.nodeIndex)
-
 	//figure out who our predecessor is
 	var predecessor int
 	if ss.nodeIndex == 0 {
@@ -736,6 +733,7 @@ func (ss *Storageserver) checkServer(key string) (storageproto.Node, *rpc.Client
 			//fmt.Println("attempting to lock node list")
 			<-ss.nodeListM
 			//fmt.Println("locked node list")
+
 			for _, node := range ss.nodeList {
 				if node.NodeID == nodeId {
 					nodeToSendTo = node
@@ -768,7 +766,7 @@ func (ss *Storageserver) checkServer(key string) (storageproto.Node, *rpc.Client
 
 			nodeToSendTo := storageproto.Node{}
 
-			<- ss.nodeListM
+			<-ss.nodeListM
 			for _, node := range ss.nodeList {
 				if node.NodeID == nodeId {
 					nodeToSendTo = node
@@ -788,7 +786,6 @@ func (ss *Storageserver) checkServer(key string) (storageproto.Node, *rpc.Client
 
 //get
 func (ss *Storageserver) iGet(args *storageproto.GetArgs, reply *storageproto.GetReply) error {
-	//fmt.Println("Client called Get")
 	node, server, correct := ss.checkServer(args.Key)
 
 	//if it's the wrong server we redirect to other server provided by get server
@@ -798,7 +795,7 @@ func (ss *Storageserver) iGet(args *storageproto.GetArgs, reply *storageproto.Ge
 		}
 		err := server.Call("StorageRPC.Get", args, reply)
 		if err != nil {
-			<- ss.deadNodeListM
+			<-ss.deadNodeListM
 			ss.deadNodeList = append(ss.deadNodeList, node)
 			ss.deadNodeListM <- 1
 			ss.collectBodies()
@@ -849,14 +846,13 @@ func (ss *Storageserver) iGet(args *storageproto.GetArgs, reply *storageproto.Ge
 			}
 		}
 		ss.fileMapM <- 1
-	} 
+	}
 
 	//fmt.Println("done with get")
 	return nil
 }
 
 func (ss *Storageserver) iPut(args *storageproto.PutArgs, reply *storageproto.PutReply) error {
-	//fmt.Println("Client called Put")
 	node, server, correct := ss.checkServer(args.Key)
 
 	if correct == false {
@@ -867,7 +863,7 @@ func (ss *Storageserver) iPut(args *storageproto.PutArgs, reply *storageproto.Pu
 		////fmt.Println("Oh fuck.")
 		err := server.Call("StorageRPC.Put", args, reply)
 		if err != nil {
-			<- ss.deadNodeListM
+			<-ss.deadNodeListM
 			ss.deadNodeList = append(ss.deadNodeList, node)
 			ss.deadNodeListM <- 1
 			ss.collectBodies()
@@ -881,7 +877,7 @@ func (ss *Storageserver) iPut(args *storageproto.PutArgs, reply *storageproto.Pu
 
 	//userdata
 	if args.Username == "" {
-		<- ss.userMapM
+		<-ss.userMapM
 		ss.userMap[args.Key] = args.JSONFile
 		ss.userMapM <- 1
 	} else {
@@ -902,7 +898,7 @@ func (ss *Storageserver) iPut(args *storageproto.PutArgs, reply *storageproto.Pu
 			return nil
 		}
 
-		<- ss.fileMapM
+		<-ss.fileMapM
 		ss.fileMap[args.Key] = file
 		ss.fileMapM <- 1
 	}
@@ -923,7 +919,7 @@ func (ss *Storageserver) iDelete(args *storageproto.GetArgs, reply *storageproto
 		}
 		err := server.Call("StorageRPC.Delete", args, reply)
 		if err != nil {
-			<- ss.deadNodeListM
+			<-ss.deadNodeListM
 			ss.deadNodeList = append(ss.deadNodeList, node)
 			ss.deadNodeListM <- 1
 			ss.collectBodies()
