@@ -447,7 +447,7 @@ func (ss *Storageserver) checkServer(key string) (*rpc.Client, bool) {
 // These should do something! :-)
 
 func (ss *Storageserver) iGet(args *storageproto.GetArgs, reply *storageproto.GetReply) error {
-	fmt.Println("Client called Get")
+	fmt.Println("Client called Get on Key ", args.Key)
 	server, correct := ss.checkServer(args.Key)
 
 	if correct == false {
@@ -473,7 +473,7 @@ func (ss *Storageserver) iGet(args *storageproto.GetArgs, reply *storageproto.Ge
 }
 
 func (ss *Storageserver) iPut(args *storageproto.PutArgs, reply *storageproto.PutReply) error {
-	fmt.Println("Client called Put")
+	fmt.Println("Client called Put...Key: ", args.Key)
 	server, correct := ss.checkServer(args.Key)
 
 	if correct == false {

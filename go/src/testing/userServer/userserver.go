@@ -55,10 +55,7 @@ func main() {
 		if scanErr == nil {
 			cmdarray := strings.Split(string(cmd), " ")
 
-			ci, found := cmdmap[cmdarray[0]]
-			if !found {
-				log.Fatal("Unknown command ", cmd)
-			}
+			ci, _ := cmdmap[cmdarray[0]]
 
 			switch cmdarray[0] {
 			case "uc": // user create
